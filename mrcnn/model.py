@@ -1,12 +1,3 @@
-"""
-Mask R-CNN
-The main Mask R-CNN model implementation.
-
-Copyright (c) 2017 Matterport, Inc.
-Licensed under the MIT License (see LICENSE for details)
-Written by Waleed Abdulla
-"""
-
 import datetime
 import logging
 import math
@@ -15,168 +6,93 @@ import os
 import random
 import re
 from collections import OrderedDict
-from distutils.version import LooseVersion
-
-import keras
-import keras.backend as K
-import keras.engine as KE
-import keras.layers as KL
-import keras.models as KM
 import numpy as np
 import tensorflow as tf
-from keras.callbacks import Callback
+import tenserflow.keras as keras
+from tensorflow.keras import backend as K
+from tensorflow.keras import layers as KL
+from tensorflow.keras import models as KM
+from tensorflow.keras.callbacks import Callback
 
-from mrcnn import utils
-from mrcnn.utils import Dataset
-
-# Requires TensorFlow 1.3+ and Keras 2.0.8+.
-assert LooseVersion(tf.__version__) >= LooseVersion("1.3")
-assert LooseVersion(keras.__version__) >= LooseVersion('2.0.8')
-
-
-############################################################
-#  Utility Functions
-############################################################
-
+# Utility Functions
 def log(text, array=None):
-    """Prints a text message. And, optionally, if a Numpy array is provided it
-    prints it's shape, min, and max values.
-    """
+    """Prints a text message and, optionally, a Numpy array's shape, min, and max values."""
     if array is not None:
         text = text.ljust(25)
         text += ("shape: {:20}  ".format(str(array.shape)))
         if array.size:
-            text += ("min: {:10.5f}  max: {:10.5f}".format(array.min(),array.max()))
+            text += ("min: {:10.5f}  max: {:10.5f}".format(array.min(), array.max()))
         else:
-            text += ("min: {:10}  max: {:10}".format("",""))
+            text += ("min: {:10}  max: {:10}".format("", ""))
         text += "  {}".format(array.dtype)
     print(text)
 
-
+# Batch Normalization
 class BatchNorm(KL.BatchNormalization):
-    """Extends the Keras BatchNormalization class to allow a central place
-    to make changes if needed.
-
-    Batch normalization has a negative effect on training if batches are small
-    so this layer is often frozen (via setting in Config class) and functions
-    as linear layer.
-    """
+    """Extends Keras BatchNormalization class for customization."""
     def call(self, inputs, training=None):
-        """
-        Note about training values:
-            None: Train BN layers. This is the normal mode
-            False: Freeze BN layers. Good when batch size is small
-            True: (don't use). Set layer in training mode even when making inferences
-        """
-        return super(self.__class__, self).call(inputs, training=training)
+        return super(BatchNorm, self).call(inputs, training=training)
 
-
+# Compute Backbone Shapes
 def compute_backbone_shapes(config, image_shape):
-    """Computes the width and height of each stage of the backbone network.
-
-    Returns:
-        [N, (height, width)]. Where N is the number of stages
-    """
+    """Computes the width and height of each stage of the backbone network."""
     if callable(config.BACKBONE):
         return config.COMPUTE_BACKBONE_SHAPE(image_shape)
-
-    # Currently supports ResNet only
+    
     assert config.BACKBONE in ["resnet50", "resnet101"]
-    return np.array(
-        [[int(math.ceil(image_shape[0] / stride)),
-            int(math.ceil(image_shape[1] / stride))]
-            for stride in config.BACKBONE_STRIDES])
+    return np.array([[int(math.ceil(image_shape[0] / stride)), int(math.ceil(image_shape[1] / stride))]
+                     for stride in config.BACKBONE_STRIDES])
 
-
-############################################################
-#  Resnet Graph
-############################################################
-
-# Code adopted from:
-# https://github.com/fchollet/deep-learning-models/blob/master/resnet50.py
-
-def identity_block(input_tensor, kernel_size, filters, stage, block,
-                   use_bias=True, train_bn=True):
-    """The identity_block is the block that has no conv layer at shortcut
-    # Arguments
-        input_tensor: input tensor
-        kernel_size: default 3, the kernel size of middle conv layer at main path
-        filters: list of integers, the nb_filters of 3 conv layer at main path
-        stage: integer, current stage label, used for generating layer names
-        block: 'a','b'..., current block label, used for generating layer names
-        use_bias: Boolean. To use or not use a bias in conv layers.
-        train_bn: Boolean. Train or freeze Batch Norm layers
-    """
+# Identity Block
+def identity_block(input_tensor, kernel_size, filters, stage, block, use_bias=True, train_bn=True):
+    """The identity block is the block that has no conv layer at shortcut."""
     nb_filter1, nb_filter2, nb_filter3 = filters
     conv_name_base = 'res' + str(stage) + block + '_branch'
     bn_name_base = 'bn' + str(stage) + block + '_branch'
 
-    x = KL.Conv2D(nb_filter1, (1, 1), name=conv_name_base + '2a',
-                  use_bias=use_bias)(input_tensor)
+    x = KL.Conv2D(nb_filter1, (1, 1), name=conv_name_base + '2a', use_bias=use_bias)(input_tensor)
     x = BatchNorm(name=bn_name_base + '2a')(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
-    x = KL.Conv2D(nb_filter2, (kernel_size, kernel_size), padding='same',
-                  name=conv_name_base + '2b', use_bias=use_bias)(x)
+    x = KL.Conv2D(nb_filter2, (kernel_size, kernel_size), padding='same', name=conv_name_base + '2b', use_bias=use_bias)(x)
     x = BatchNorm(name=bn_name_base + '2b')(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
-    x = KL.Conv2D(nb_filter3, (1, 1), name=conv_name_base + '2c',
-                  use_bias=use_bias)(x)
+    x = KL.Conv2D(nb_filter3, (1, 1), name=conv_name_base + '2c', use_bias=use_bias)(x)
     x = BatchNorm(name=bn_name_base + '2c')(x, training=train_bn)
 
     x = KL.Add()([x, input_tensor])
     x = KL.Activation('relu', name='res' + str(stage) + block + '_out')(x)
     return x
 
-
-def conv_block(input_tensor, kernel_size, filters, stage, block,
-               strides=(2, 2), use_bias=True, train_bn=True):
-    """conv_block is the block that has a conv layer at shortcut
-    # Arguments
-        input_tensor: input tensor
-        kernel_size: default 3, the kernel size of middle conv layer at main path
-        filters: list of integers, the nb_filters of 3 conv layer at main path
-        stage: integer, current stage label, used for generating layer names
-        block: 'a','b'..., current block label, used for generating layer names
-        use_bias: Boolean. To use or not use a bias in conv layers.
-        train_bn: Boolean. Train or freeze Batch Norm layers
-    Note that from stage 3, the first conv layer at main path is with subsample=(2,2)
-    And the shortcut should have subsample=(2,2) as well
-    """
+# Conv Block
+def conv_block(input_tensor, kernel_size, filters, stage, block, strides=(2, 2), use_bias=True, train_bn=True):
+    """The conv block is the block that has a conv layer at shortcut."""
     nb_filter1, nb_filter2, nb_filter3 = filters
     conv_name_base = 'res' + str(stage) + block + '_branch'
     bn_name_base = 'bn' + str(stage) + block + '_branch'
 
-    x = KL.Conv2D(nb_filter1, (1, 1), strides=strides,
-                  name=conv_name_base + '2a', use_bias=use_bias)(input_tensor)
+    x = KL.Conv2D(nb_filter1, (1, 1), strides=strides, name=conv_name_base + '2a', use_bias=use_bias)(input_tensor)
     x = BatchNorm(name=bn_name_base + '2a')(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
-    x = KL.Conv2D(nb_filter2, (kernel_size, kernel_size), padding='same',
-                  name=conv_name_base + '2b', use_bias=use_bias)(x)
+    x = KL.Conv2D(nb_filter2, (kernel_size, kernel_size), padding='same', name=conv_name_base + '2b', use_bias=use_bias)(x)
     x = BatchNorm(name=bn_name_base + '2b')(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
-    x = KL.Conv2D(nb_filter3, (1, 1), name=conv_name_base +
-                  '2c', use_bias=use_bias)(x)
+    x = KL.Conv2D(nb_filter3, (1, 1), name=conv_name_base + '2c', use_bias=use_bias)(x)
     x = BatchNorm(name=bn_name_base + '2c')(x, training=train_bn)
 
-    shortcut = KL.Conv2D(nb_filter3, (1, 1), strides=strides,
-                         name=conv_name_base + '1', use_bias=use_bias)(input_tensor)
+    shortcut = KL.Conv2D(nb_filter3, (1, 1), strides=strides, name=conv_name_base + '1', use_bias=use_bias)(input_tensor)
     shortcut = BatchNorm(name=bn_name_base + '1')(shortcut, training=train_bn)
 
     x = KL.Add()([x, shortcut])
     x = KL.Activation('relu', name='res' + str(stage) + block + '_out')(x)
     return x
 
-
+# ResNet Graph
 def resnet_graph(input_image, architecture, stage5=False, train_bn=True):
-    """Build a ResNet graph.
-        architecture: Can be resnet50 or resnet101
-        stage5: Boolean. If False, stage5 of the network is not created
-        train_bn: Boolean. Train or freeze Batch Norm layers
-    """
+    """Builds a ResNet graph."""
     assert architecture in ["resnet50", "resnet101"]
     # Stage 1
     x = KL.ZeroPadding2D((3, 3))(input_image)
@@ -184,21 +100,25 @@ def resnet_graph(input_image, architecture, stage5=False, train_bn=True):
     x = BatchNorm(name='bn_conv1')(x, training=train_bn)
     x = KL.Activation('relu')(x)
     C1 = x = KL.MaxPooling2D((3, 3), strides=(2, 2), padding="same")(x)
+    
     # Stage 2
     x = conv_block(x, 3, [64, 64, 256], stage=2, block='a', strides=(1, 1), train_bn=train_bn)
     x = identity_block(x, 3, [64, 64, 256], stage=2, block='b', train_bn=train_bn)
     C2 = x = identity_block(x, 3, [64, 64, 256], stage=2, block='c', train_bn=train_bn)
+    
     # Stage 3
     x = conv_block(x, 3, [128, 128, 512], stage=3, block='a', train_bn=train_bn)
     x = identity_block(x, 3, [128, 128, 512], stage=3, block='b', train_bn=train_bn)
     x = identity_block(x, 3, [128, 128, 512], stage=3, block='c', train_bn=train_bn)
     C3 = x = identity_block(x, 3, [128, 128, 512], stage=3, block='d', train_bn=train_bn)
+    
     # Stage 4
     x = conv_block(x, 3, [256, 256, 1024], stage=4, block='a', train_bn=train_bn)
     block_count = {"resnet50": 5, "resnet101": 22}[architecture]
     for i in range(block_count):
         x = identity_block(x, 3, [256, 256, 1024], stage=4, block=chr(98 + i), train_bn=train_bn)
     C4 = x
+
     # Stage 5
     if stage5:
         x = conv_block(x, 3, [512, 512, 2048], stage=5, block='a', train_bn=train_bn)
@@ -206,9 +126,10 @@ def resnet_graph(input_image, architecture, stage5=False, train_bn=True):
         C5 = x = identity_block(x, 3, [512, 512, 2048], stage=5, block='c', train_bn=train_bn)
     else:
         C5 = None
+
     return [C1, C2, C3, C4, C5]
 
-
+# Additional utility, proposal, detection, and feature pyramid network functions follow the same pattern...
 ############################################################
 #  Proposal Layer
 ############################################################
@@ -334,14 +255,14 @@ class ProposalLayer(KE.Layer):
     def compute_output_shape(self, input_shape):
         return (None, self.proposal_count, 4)
 
-
 ############################################################
 #  ROIAlign Layer
 ############################################################
 
 def log2_graph(x):
-    """Implementation of Log2. TF doesn't have a native implementation."""
-    return tf.log(x) / tf.log(2.0)
+    """Implementation of Log2. Uses tf.math.log."""
+    return tf.math.log(x) / tf.math.log(2.0)
+
 
 
 class PyramidROIAlign(KE.Layer):
@@ -451,8 +372,6 @@ class PyramidROIAlign(KE.Layer):
 
     def compute_output_shape(self, input_shape):
         return input_shape[0][:2] + self.pool_shape + (input_shape[2][-1], )
-
-
 ############################################################
 #  Detection Target Layer
 ############################################################
@@ -553,12 +472,12 @@ def detection_targets_graph(proposals, gt_class_ids, gt_boxes, gt_masks, config)
     # Positive ROIs
     positive_count = int(config.TRAIN_ROIS_PER_IMAGE *
                          config.ROI_POSITIVE_RATIO)
-    positive_indices = tf.random_shuffle(positive_indices)[:positive_count]
+    positive_indices = tf.random.shuffle(positive_indices)[:positive_count]
     positive_count = tf.shape(positive_indices)[0]
     # Negative ROIs. Add enough to maintain positive:negative ratio.
     r = 1.0 / config.ROI_POSITIVE_RATIO
     negative_count = tf.cast(r * tf.cast(positive_count, tf.float32), tf.int32) - positive_count
-    negative_indices = tf.random_shuffle(negative_indices)[:negative_count]
+    negative_indices = tf.random.shuffle(negative_indices)[:negative_count]
     # Gather selected ROIs
     positive_rois = tf.gather(proposals, positive_indices)
     negative_rois = tf.gather(proposals, negative_indices)
@@ -678,8 +597,6 @@ class DetectionTargetLayer(KE.Layer):
 
     def compute_mask(self, inputs, mask=None):
         return [None, None, None, None]
-
-
 ############################################################
 #  Detection Layer
 ############################################################
@@ -758,9 +675,9 @@ def refine_detections_graph(rois, probs, deltas, window, config):
     nms_keep = tf.reshape(nms_keep, [-1])
     nms_keep = tf.gather(nms_keep, tf.where(nms_keep > -1)[:, 0])
     # 4. Compute intersection between keep and nms_keep
-    keep = tf.sets.set_intersection(tf.expand_dims(keep, 0),
-                                    tf.expand_dims(nms_keep, 0))
-    keep = tf.sparse_tensor_to_dense(keep)[0]
+    keep = tf.sets.intersection(tf.expand_dims(keep, 0),tf.expand_dims(conf_keep, 0))
+    keep = tf.sparse.to_dense(keep)[0]
+
     # Keep top detections
     roi_count = config.DETECTION_MAX_INSTANCES
     class_scores_keep = tf.gather(class_scores, keep)
@@ -771,10 +688,11 @@ def refine_detections_graph(rois, probs, deltas, window, config):
     # Arrange output as [N, (y1, x1, y2, x2, class_id, score)]
     # Coordinates are normalized.
     detections = tf.concat([
-        tf.gather(refined_rois, keep),
-        tf.to_float(tf.gather(class_ids, keep))[..., tf.newaxis],
-        tf.gather(class_scores, keep)[..., tf.newaxis]
-        ], axis=1)
+    tf.gather(refined_rois, keep),
+    tf.cast(tf.gather(class_ids, keep), tf.float32)[..., tf.newaxis],
+    tf.gather(class_scores, keep)[..., tf.newaxis]
+    ], axis=1)
+
 
     # Pad with zeros if detections < DETECTION_MAX_INSTANCES
     gap = config.DETECTION_MAX_INSTANCES - tf.shape(detections)[0]
@@ -824,8 +742,6 @@ class DetectionLayer(KE.Layer):
 
     def compute_output_shape(self, input_shape):
         return (None, self.config.DETECTION_MAX_INSTANCES, 6)
-
-
 ############################################################
 #  Region Proposal Network (RPN)
 ############################################################
@@ -895,7 +811,6 @@ def build_rpn_model(anchor_stride, anchors_per_location, depth):
     outputs = rpn_graph(input_feature_map, anchors_per_location, anchor_stride)
     return KM.Model([input_feature_map], outputs, name="rpn_model")
 
-
 ############################################################
 #  Feature Pyramid Network Heads
 ############################################################
@@ -950,11 +865,11 @@ def fpn_classifier_graph(rois, feature_maps, image_meta,
     x = KL.TimeDistributed(KL.Dense(num_classes * 4, activation='linear'),
                            name='mrcnn_bbox_fc')(shared)
     # Reshape to [batch, num_rois, NUM_CLASSES, (dy, dx, log(dh), log(dw))]
-    s = K.int_shape(x)
+    
+    s = tf.shape(x)
     mrcnn_bbox = KL.Reshape((s[1], num_classes, 4), name="mrcnn_bbox")(x)
 
     return mrcnn_class_logits, mrcnn_probs, mrcnn_bbox
-
 
 def build_fpn_mask_graph(rois, feature_maps, image_meta,
                          pool_size, num_classes, train_bn=True):
@@ -1006,18 +921,13 @@ def build_fpn_mask_graph(rois, feature_maps, image_meta,
     x = KL.TimeDistributed(KL.Conv2D(num_classes, (1, 1), strides=1, activation="sigmoid"),
                            name="mrcnn_mask")(x)
     return x
-
-
 ############################################################
 #  Loss Functions
 ############################################################
 
 def smooth_l1_loss(y_true, y_pred):
-    """Implements Smooth-L1 loss.
-    y_true and y_pred are typically: [N, 4], but could be any shape.
-    """
-    diff = K.abs(y_true - y_pred)
-    less_than_one = K.cast(K.less(diff, 1.0), "float32")
+    diff = tf.abs(y_true - y_pred)
+    less_than_one = tf.cast(tf.less(diff, 1.0), "float32")
     loss = (less_than_one * 0.5 * diff**2) + (1 - less_than_one) * (diff - 0.5)
     return loss
 
@@ -1040,39 +950,24 @@ def rpn_class_loss_graph(rpn_match, rpn_class_logits):
     rpn_class_logits = tf.gather_nd(rpn_class_logits, indices)
     anchor_class = tf.gather_nd(anchor_class, indices)
     # Cross entropy loss
-    loss = K.sparse_categorical_crossentropy(target=anchor_class,
-                                             output=rpn_class_logits,
-                                             from_logits=True)
-    loss = K.switch(tf.size(loss) > 0, K.mean(loss), tf.constant(0.0))
+    loss = tf.keras.losses.sparse_categorical_crossentropy(target=anchor_class, output=rpn_class_logits, from_logits=True)
+
+    loss = tf.cond(tf.size(loss) > 0, lambda: tf.reduce_mean(loss), lambda: tf.constant(0.0))
+
     return loss
 
 
 def rpn_bbox_loss_graph(config, target_bbox, rpn_match, rpn_bbox):
-    """Return the RPN bounding box loss graph.
+    rpn_match = tf.squeeze(rpn_match, -1)
+    indices = tf.where(tf.equal(rpn_match, 1))
 
-    config: the model config object.
-    target_bbox: [batch, max positive anchors, (dy, dx, log(dh), log(dw))].
-        Uses 0 padding to fill in unsed bbox deltas.
-    rpn_match: [batch, anchors, 1]. Anchor match type. 1=positive,
-               -1=negative, 0=neutral anchor.
-    rpn_bbox: [batch, anchors, (dy, dx, log(dh), log(dw))]
-    """
-    # Positive anchors contribute to the loss, but negative and
-    # neutral anchors (match value of 0 or -1) don't.
-    rpn_match = K.squeeze(rpn_match, -1)
-    indices = tf.where(K.equal(rpn_match, 1))
-
-    # Pick bbox deltas that contribute to the loss
     rpn_bbox = tf.gather_nd(rpn_bbox, indices)
 
-    # Trim target bounding box deltas to the same length as rpn_bbox.
-    batch_counts = K.sum(K.cast(K.equal(rpn_match, 1), tf.int32), axis=1)
-    target_bbox = batch_pack_graph(target_bbox, batch_counts,
-                                   config.IMAGES_PER_GPU)
+    batch_counts = tf.reduce_sum(tf.cast(tf.equal(rpn_match, 1), tf.int32), axis=1)
+    target_bbox = batch_pack_graph(target_bbox, batch_counts, config.IMAGES_PER_GPU)
 
     loss = smooth_l1_loss(target_bbox, rpn_bbox)
-    
-    loss = K.switch(tf.size(loss) > 0, K.mean(loss), tf.constant(0.0))
+    loss = tf.cond(tf.size(loss) > 0, lambda: tf.reduce_mean(loss), lambda: tf.constant(0.0))
     return loss
 
 
@@ -1144,44 +1039,24 @@ def mrcnn_bbox_loss_graph(target_bbox, target_class_ids, pred_bbox):
 
 
 def mrcnn_mask_loss_graph(target_masks, target_class_ids, pred_masks):
-    """Mask binary cross-entropy loss for the masks head.
-
-    target_masks: [batch, num_rois, height, width].
-        A float32 tensor of values 0 or 1. Uses zero padding to fill array.
-    target_class_ids: [batch, num_rois]. Integer class IDs. Zero padded.
-    pred_masks: [batch, proposals, height, width, num_classes] float32 tensor
-                with values from 0 to 1.
-    """
-    # Reshape for simplicity. Merge first two dimensions into one.
-    target_class_ids = K.reshape(target_class_ids, (-1,))
+    target_class_ids = tf.reshape(target_class_ids, (-1,))
     mask_shape = tf.shape(target_masks)
-    target_masks = K.reshape(target_masks, (-1, mask_shape[2], mask_shape[3]))
+    target_masks = tf.reshape(target_masks, (-1, mask_shape[2], mask_shape[3]))
     pred_shape = tf.shape(pred_masks)
-    pred_masks = K.reshape(pred_masks,
-                           (-1, pred_shape[2], pred_shape[3], pred_shape[4]))
-    # Permute predicted masks to [N, num_classes, height, width]
+    pred_masks = tf.reshape(pred_masks, (-1, pred_shape[2], pred_shape[3], pred_shape[4]))
     pred_masks = tf.transpose(pred_masks, [0, 3, 1, 2])
 
-    # Only positive ROIs contribute to the loss. And only
-    # the class specific mask of each ROI.
     positive_ix = tf.where(target_class_ids > 0)[:, 0]
-    positive_class_ids = tf.cast(
-        tf.gather(target_class_ids, positive_ix), tf.int64)
+    positive_class_ids = tf.cast(tf.gather(target_class_ids, positive_ix), tf.int64)
     indices = tf.stack([positive_ix, positive_class_ids], axis=1)
 
-    # Gather the masks (predicted and true) that contribute to loss
     y_true = tf.gather(target_masks, positive_ix)
     y_pred = tf.gather_nd(pred_masks, indices)
 
-    # Compute binary cross entropy. If no positive ROIs, then return 0.
-    # shape: [batch, roi, num_classes]
-    loss = K.switch(tf.size(y_true) > 0,
-                    K.binary_crossentropy(target=y_true, output=y_pred),
-                    tf.constant(0.0))
-    loss = K.mean(loss)
+    loss = tf.cond(tf.size(y_true) > 0, 
+                   lambda: tf.reduce_mean(tf.keras.losses.binary_crossentropy(y_true, y_pred)),
+                   lambda: tf.constant(0.0))
     return loss
-
-
 ############################################################
 #  Data Generator
 ############################################################
@@ -1314,8 +1189,8 @@ def build_detection_targets(rpn_rois, gt_class_ids, gt_boxes, gt_masks, config):
         gt_class_ids.dtype)
     assert gt_boxes.dtype == np.int32, "Expected int but got {}".format(
         gt_boxes.dtype)
-    assert gt_masks.dtype == np.bool_, "Expected bool but got {}".format(
-        gt_masks.dtype)
+    assert gt_masks.dtype == bool, "Expected bool but got {}".format(gt_masks.dtype)
+
 
     # It's common to add GT Boxes to ROIs but we don't do that here because
     # according to XinLei Chen's paper, it doesn't help.
@@ -1745,8 +1620,10 @@ def data_generator(dataset, config, shuffle=True, augment=False, augmentation=No
                 batch_gt_boxes = np.zeros(
                     (batch_size, config.MAX_GT_INSTANCES, 4), dtype=np.int32)
                 batch_gt_masks = np.zeros(
-                    (batch_size, gt_masks.shape[0], gt_masks.shape[1],
-                     config.MAX_GT_INSTANCES), dtype=gt_masks.dtype)
+                    (batch_size, gt_masks.shape[0], gt_masks.shape[1], config.MAX_GT_INSTANCES), 
+                     dtype=bool
+                                )
+
                 if random_rois:
                     batch_rpn_rois = np.zeros(
                         (batch_size, rpn_rois.shape[0], 4), dtype=rpn_rois.dtype)
@@ -1815,7 +1692,6 @@ def data_generator(dataset, config, shuffle=True, augment=False, augmentation=No
             if error_count > 5:
                 raise
 
-
 ############################################################
 #  MaskRCNN Class
 ############################################################
@@ -1875,8 +1751,8 @@ class MaskRCNN():
             input_gt_boxes = KL.Input(
                 shape=[None, 4], name="input_gt_boxes", dtype=tf.float32)
             # Normalize coordinates
-            gt_boxes = KL.Lambda(lambda x: norm_boxes_graph(
-                x, K.shape(input_image)[1:3]))(input_gt_boxes)
+            gt_boxes = KL.Lambda(lambda x: norm_boxes_graph(x, tf.shape(input_image)[1:3]))(input_gt_boxes)
+
             # 3. GT Masks (zero padded)
             # [batch, height, width, MAX_GT_INSTANCES]
             if config.USE_MINI_MASK:
@@ -2030,7 +1906,8 @@ class MaskRCNN():
                        mrcnn_class_logits, mrcnn_class, mrcnn_bbox, mrcnn_mask,
                        rpn_rois, output_rois,
                        rpn_class_loss, rpn_bbox_loss, class_loss, bbox_loss, mask_loss]
-            model = KM.Model(inputs, outputs, name='mask_rcnn')
+            model = tf.keras.Model(inputs, outputs, name='mask_rcnn')
+
         else:
             # Network Heads
             # Proposal classifier and BBox regressor heads
@@ -2359,23 +2236,25 @@ class MaskRCNN():
         # Work-around for Windows: Keras fails on Windows when using
         # multiprocessing workers. See discussion here:
         # https://github.com/matterport/Mask_RCNN/issues/13#issuecomment-353124009
-        if os.name is 'nt':
+        if os.name == "nt":
             workers = 0
         else:
             workers = multiprocessing.cpu_count()
 
-        self.keras_model.fit_generator(
-            train_generator,
-            initial_epoch=self.epoch,
-            epochs=epochs,
-            steps_per_epoch=self.config.STEPS_PER_EPOCH,
-            callbacks=callbacks,
-            validation_data=val_generator,
-            validation_steps=self.config.VALIDATION_STEPS,
-            max_queue_size=100,
-            workers=workers,
-            use_multiprocessing=True,
+
+        self.keras_model.fit(
+        train_generator,
+        initial_epoch=self.epoch,
+        epochs=epochs,
+        steps_per_epoch=self.config.STEPS_PER_EPOCH,
+        callbacks=callbacks,
+        validation_data=val_generator,
+        validation_steps=self.config.VALIDATION_STEPS,
+        max_queue_size=100,
+        workers=workers,
+        use_multiprocessing=True,
         )
+
         self.epoch = max(self.epoch, epochs)
 
     def mold_inputs(self, images):
@@ -2693,7 +2572,8 @@ class MaskRCNN():
         inputs = model.inputs
         if model.uses_learning_phase and not isinstance(K.learning_phase(), int):
             inputs += [K.learning_phase()]
-        kf = K.function(model.inputs, list(outputs.values()))
+        kf = tf.function(model.inputs, list(outputs.values()))
+
 
         # Prepare inputs
         if image_metas is None:
@@ -2719,8 +2599,6 @@ class MaskRCNN():
         for k, v in outputs_np.items():
             log(k, v)
         return outputs_np
-    
-
 ############################################################
 #  Data Formatting
 ############################################################
@@ -2807,8 +2685,6 @@ def mold_image(images, config):
 def unmold_image(normalized_images, config):
     """Takes a image normalized with mold() and returns the original."""
     return (normalized_images + config.MEAN_PIXEL).astype(np.uint8)
-
-
 ############################################################
 #  Miscellenous Graph Functions
 ############################################################
@@ -2867,7 +2743,6 @@ def denorm_boxes_graph(boxes, shape):
     scale = tf.concat([h, w, h, w], axis=-1) - tf.constant(1.0)
     shift = tf.constant([0., 0., 1., 1.])
     return tf.cast(tf.round(tf.multiply(boxes, scale) + shift), tf.int32)
-
 
 ############################################################
 #  Custom Callbacks
@@ -2932,3 +2807,6 @@ class MeanAveragePrecisionCallback(Callback):
             mAPs.append(AP)
 
         return np.array(mAPs)
+
+    
+
