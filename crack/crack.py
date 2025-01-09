@@ -68,7 +68,7 @@ class CrackConfig(Config):
     IMAGES_PER_GPU = 2
 
     # Number of classes (including background)
-    NUM_CLASSES = 1 + 1  # Background + crack
+    NUM_CLASSES = 27  # Background + crack
 
     # Number of training steps per epoch
     STEPS_PER_EPOCH = 100
@@ -88,67 +88,47 @@ model_inference = modellib.MaskRCNN(mode="inference", config=CrackConfig(), mode
 #  Dataset
 ############################################################
 
-class CrackDataset(utils.Dataset):
+def load_crack(self, dataset_dir, subset):
+    """Load a subset of the crack dataset using bounding boxes and dynamically add classes."""
+    
+    # Load annotations (we expect a list of annotations in COCO format)
+    annotations = json.load(open(os.path.join(dataset_dir, "via_region_data.json")))
 
-    def load_crack(self, dataset_dir, subset):
-        """Load a subset of the crack dataset.
-        dataset_dir: Root directory of the dataset.
-        subset: Subset to load: train or val
-        """
-        # Add classes. We have only one class to add.
-        self.add_class("crack", 1, "crack")
+    # Dynamically add classes based on the 'categories' field in the annotations
+    categories = annotations['categories']  # Get the list of categories
+    for category in categories:
+        class_id = category['id']
+        class_name = category['name']
+        self.add_class("crack", class_id, class_name)
 
-        # Train or validation dataset?
-        assert subset in ["train", "val"]
-        dataset_dir = os.path.join(dataset_dir, subset)
+    # Train or validation dataset?
+    assert subset in ["train", "val"]
+    dataset_dir = os.path.join(dataset_dir, subset)
 
-        # Load annotations
-        # VGG Image Annotator (up to version 1.6) saves each image in the form:
-        # { 'filename': '28503151_5b5b7ec140_b.jpg',
-        #   'regions': {
-        #       '0': {
-        #           'region_attributes': {},
-        #           'shape_attributes': {
-        #               'all_points_x': [...],
-        #               'all_points_y': [...],
-        #               'name': 'polygon'}},
-        #       ... more regions ...
-        #   },
-        #   'size': 100202
-        # }
-        # We mostly care about the x and y coordinates of each region
-        # Note: In VIA 2.0, regions was changed from a dict to a list.
-        annotations = json.load(open(os.path.join(dataset_dir, "via_region_data.json")))
-        annotations = list(annotations.values())  # don't need the dict keys
+    # Load images and bounding boxes
+    images = annotations['images']  # Images metadata
+    bboxes = annotations['annotations']  # Bounding boxes
 
-        # The VIA tool saves images in the JSON even if they don't have any
-        # annotations. Skip unannotated images.
-        annotations = [a for a in annotations if a['regions']]
+    # Add images and corresponding bounding boxes
+    for image_info in images:
+        image_id = image_info['id']
+        image_path = os.path.join(dataset_dir, image_info['file_name'])
+        height = image_info['height']
+        width = image_info['width']
 
-        # Add images
-        for a in annotations:
-            # Get the x, y coordinaets of points of the polygons that make up
-            # the outline of each object instance. These are stores in the
-            # shape_attributes (see json format above)
-            # The if condition is needed to support VIA versions 1.x and 2.x.
-            if type(a['regions']) is dict:
-                polygons = [r['shape_attributes'] for r in a['regions'].values()]
-            else:
-                polygons = [r['shape_attributes'] for r in a['regions']] 
+        # Get the bounding boxes for this image
+        image_bboxes = [bbox for bbox in bboxes if bbox['image_id'] == image_id]
 
-            # load_mask() needs the image size to convert polygons to masks.
-            # Unfortunately, VIA doesn't include it in JSON, so we must read
-            # the image. This is only managable since the dataset is tiny.
-            image_path = os.path.join(dataset_dir, a['filename'])
-            image = skimage.io.imread(image_path)
-            height, width = image.shape[:2]
+        # Add the image
+        self.add_image(
+            "crack",
+            image_id=image_id,
+            path=image_path,
+            width=width,
+            height=height,
+            bboxes=image_bboxes  # Attach bounding boxes
+        )
 
-            self.add_image(
-                "crack",
-                image_id=a['filename'],  # use file name as a unique image id
-                path=image_path,
-                width=width, height=height,
-                polygons=polygons)
 
     def load_mask(self, image_id):
         """Generate instance masks for an image.
@@ -312,6 +292,7 @@ def detect_and_color_splash(model, image_path=None, video_path=None):
 if __name__ == '__main__':
     import argparse
 
+
     # Parse command line arguments
     parser = argparse.ArgumentParser(
         description='Train Mask R-CNN to detect cracks.')
@@ -385,11 +366,12 @@ if __name__ == '__main__':
     # Load weights
     print("Loading weights ", weights_path)
     if args.weights.lower() == "coco":
-        # Exclude the last layers because they require a matching
-        # number of classes
-        model.load_weights(weights_path, by_name=True, exclude=[
-            "mrcnn_class_logits", "mrcnn_bbox_fc",
-            "mrcnn_bbox", "mrcnn_mask"])
+      # Exclude layers that are dependent on the number of classes
+      model.load_weights(weights_path, 
+                        by_name=True, 
+                        exclude=["mrcnn_bbox_fc", "mrcnn_class_logits", "mrcnn_mask", "mrcnn_class"])
+
+
     else:
         model.load_weights(weights_path, by_name=True)
 
