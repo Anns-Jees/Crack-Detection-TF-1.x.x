@@ -8,12 +8,12 @@ import re
 from collections import OrderedDict
 import numpy as np
 import tensorflow as tf
-import tenserflow.keras as keras
+import tensorflow.keras as keras
 from tensorflow.keras import backend as K
 from tensorflow.keras import layers as KL
 from tensorflow.keras import models as KM
 from tensorflow.keras.callbacks import Callback
-
+from mrcnn import model as modellib, utils
 # Utility Functions
 def log(text, array=None):
     """Prints a text message and, optionally, a Numpy array's shape, min, and max values."""
@@ -176,7 +176,7 @@ def clip_boxes_graph(boxes, window):
     return clipped
 
 
-class ProposalLayer(KE.Layer):
+class ProposalLayer(KL.Layer):
     """Receives anchor scores and selects a subset to pass as proposals
     to the second stage. Filtering is done based on anchor scores and
     non-max suppression to remove overlaps. It also applies bounding
@@ -265,7 +265,7 @@ def log2_graph(x):
 
 
 
-class PyramidROIAlign(KE.Layer):
+class PyramidROIAlign(KL.Layer):
     """Implements ROI Pooling on multiple levels of the feature pyramid.
 
     Params:
@@ -541,7 +541,7 @@ def detection_targets_graph(proposals, gt_class_ids, gt_boxes, gt_masks, config)
     return rois, roi_gt_class_ids, deltas, masks
 
 
-class DetectionTargetLayer(KE.Layer):
+class DetectionTargetLayer(KL.Layer):
     """Subsamples proposals and generates target box refinement, class_ids,
     and masks for each.
 
@@ -700,7 +700,7 @@ def refine_detections_graph(rois, probs, deltas, window, config):
     return detections
 
 
-class DetectionLayer(KE.Layer):
+class DetectionLayer(KL.Layer):
     """Takes classified proposal boxes and their bounding box deltas and
     returns the final detection boxes.
 
@@ -866,7 +866,7 @@ def fpn_classifier_graph(rois, feature_maps, image_meta,
                            name='mrcnn_bbox_fc')(shared)
     # Reshape to [batch, num_rois, NUM_CLASSES, (dy, dx, log(dh), log(dw))]
     
-    s = tf.shape(x)
+    s =K.int_shape(x)
     mrcnn_bbox = KL.Reshape((s[1], num_classes, 4), name="mrcnn_bbox")(x)
 
     return mrcnn_class_logits, mrcnn_probs, mrcnn_bbox
@@ -1697,10 +1697,7 @@ def data_generator(dataset, config, shuffle=True, augment=False, augmentation=No
 ############################################################
 
 class MaskRCNN():
-    """Encapsulates the Mask RCNN model functionality.
-
-    The actual Keras model is in the keras_model property.
-    """
+    """Encapsulates the Mask RCNN model functionality."""
 
     def __init__(self, mode, config, model_dir):
         """
@@ -1715,12 +1712,12 @@ class MaskRCNN():
         self.set_log_dir()
         self.keras_model = self.build(mode=mode, config=config)
 
+    def lambda_output_shape(self, input_shape):
+        # Assuming norm_boxes_graph outputs (batch_size, height, width, 4)
+        return (input_shape[0], input_shape[1], input_shape[2], 4)
+
     def build(self, mode, config):
-        """Build Mask R-CNN architecture.
-            input_shape: The shape of the input image.
-            mode: Either "training" or "inference". The inputs and
-                outputs of the model differ accordingly.
-        """
+        """Build Mask R-CNN architecture."""
         assert mode in ['training', 'inference']
 
         # Image size must be dividable by 2 multiple times
@@ -1747,12 +1744,11 @@ class MaskRCNN():
             input_gt_class_ids = KL.Input(
                 shape=[None], name="input_gt_class_ids", dtype=tf.int32)
             # 2. GT Boxes in pixels (zero padded)
-            # [batch, MAX_GT_INSTANCES, (y1, x1, y2, x2)] in image coordinates
             input_gt_boxes = KL.Input(
                 shape=[None, 4], name="input_gt_boxes", dtype=tf.float32)
             # Normalize coordinates
-            gt_boxes = KL.Lambda(lambda x: norm_boxes_graph(x, tf.shape(input_image)[1:3]))(input_gt_boxes)
-
+            gt_boxes = KL.Lambda(lambda x: norm_boxes_graph(x, tf.shape(input_image)[1:3]),
+                     output_shape=self.lambda_output_shape)(input_gt_boxes)
             # 3. GT Masks (zero padded)
             # [batch, height, width, MAX_GT_INSTANCES]
             if config.USE_MINI_MASK:
@@ -1810,7 +1806,8 @@ class MaskRCNN():
             # TODO: can this be optimized to avoid duplicating the anchors?
             anchors = np.broadcast_to(anchors, (config.BATCH_SIZE,) + anchors.shape)
             # A hack to get around Keras's bad support for constants
-            anchors = KL.Lambda(lambda x: tf.Variable(anchors), name="anchors")(input_image)
+            anchors = KL.Lambda(lambda x: tf.Variable(anchors), output_shape=anchors.shape, name="anchors")(input_image)
+
         else:
             anchors = input_anchors
 
@@ -1886,8 +1883,9 @@ class MaskRCNN():
             output_rois = KL.Lambda(lambda x: x * 1, name="output_rois")(rois)
 
             # Losses
-            rpn_class_loss = KL.Lambda(lambda x: rpn_class_loss_graph(*x), name="rpn_class_loss")(
-                [input_rpn_match, rpn_class_logits])
+            rpn_class_loss = KL.Lambda(lambda x: rpn_class_loss_graph(*x), output_shape=(1,),  # Specify the output shape as a scalar (1,)name="rpn_class_loss"
+)([input_rpn_match, rpn_class_logits])
+
             rpn_bbox_loss = KL.Lambda(lambda x: rpn_bbox_loss_graph(config, *x), name="rpn_bbox_loss")(
                 [input_rpn_bbox, input_rpn_match, rpn_bbox])
             class_loss = KL.Lambda(lambda x: mrcnn_class_loss_graph(*x), name="mrcnn_class_loss")(
@@ -1979,42 +1977,49 @@ class MaskRCNN():
         exclude: list of layer names to exclude
         """
         import h5py
-        # Conditional import to support versions of Keras before 2.2
-        # TODO: remove in about 6 months (end of 2018)
-        try:
-            from keras.engine import saving
-        except ImportError:
-            # Keras before 2.2 used the 'topology' namespace.
-            from keras.engine import topology as saving
+        from tensorflow.keras.models import load_model
 
         if exclude:
             by_name = True
 
         if h5py is None:
             raise ImportError('`load_weights` requires h5py.')
+        
+        # Open the h5 file
         f = h5py.File(filepath, mode='r')
+        
+        # Check if the model weights are under a different key
         if 'layer_names' not in f.attrs and 'model_weights' in f:
             f = f['model_weights']
 
-        # In multi-GPU training, we wrap the model. Get layers
-        # of the inner model because they have the weights.
+        # In multi-GPU training, we wrap the model. Get layers of the inner model
+        # because they have the weights.
         keras_model = self.keras_model
-        layers = keras_model.inner_model.layers if hasattr(keras_model, "inner_model")\
-            else keras_model.layers
+        layers = keras_model.inner_model.layers if hasattr(keras_model, "inner_model") else keras_model.layers
 
-        # Exclude some layers
+        # Exclude layers if provided
         if exclude:
             layers = filter(lambda l: l.name not in exclude, layers)
 
-        if by_name:
-            saving.load_weights_from_hdf5_group_by_name(f, layers)
+        # Ensure the filepath is correct
+        if os.path.exists(filepath):
+            print(f"Loading weights from {filepath}")
+            if by_name:
+                # Load weights by name and exclude certain layers
+                self.keras_model.load_weights(filepath, by_name=True, skip_mismatch=True)
+            else:
+                # Load all weights without checking names
+                self.keras_model.load_weights(filepath, skip_mismatch=True)
         else:
-            saving.load_weights_from_hdf5_group(f, layers)
+            print(f"Error: The weights file {filepath} does not exist.")
+
+        # Close the h5 file if it's open
         if hasattr(f, 'close'):
             f.close()
 
         # Update the log directory
         self.set_log_dir(filepath)
+
 
     def get_imagenet_weights(self):
         """Downloads ImageNet trained weights from Keras.
@@ -2749,7 +2754,7 @@ def denorm_boxes_graph(boxes, shape):
 ############################################################
 
 class MeanAveragePrecisionCallback(Callback):
-    def __init__(self, train_model: MaskRCNN, inference_model: MaskRCNN, dataset: Dataset,
+    def __init__(self, train_model: MaskRCNN, inference_model: MaskRCNN, dataset: utils.Dataset,
                  calculate_at_every_X_epoch: int = 3, dataset_limit: int = None,
                  verbose: int = 1):
         super().__init__()
