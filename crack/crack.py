@@ -87,47 +87,48 @@ model_inference = modellib.MaskRCNN(mode="inference", config=CrackConfig(), mode
 ############################################################
 #  Dataset
 ############################################################
+class CrackDataset(utils.Dataset):
 
-def load_crack(self, dataset_dir, subset):
-    """Load a subset of the crack dataset using bounding boxes and dynamically add classes."""
-    
-    # Load annotations (we expect a list of annotations in COCO format)
-    annotations = json.load(open(os.path.join(dataset_dir, "via_region_data.json")))
+    def load_crack(self, dataset_dir, subset):
+        """Load a subset of the crack dataset using bounding boxes and dynamically add classes."""
+        
+        # Load annotations (we expect a list of annotations in COCO format)
+        annotations = json.load(open(os.path.join(dataset_dir, "via_region_data.json")))
 
-    # Dynamically add classes based on the 'categories' field in the annotations
-    categories = annotations['categories']  # Get the list of categories
-    for category in categories:
-        class_id = category['id']
-        class_name = category['name']
-        self.add_class("crack", class_id, class_name)
+        # Dynamically add classes based on the 'categories' field in the annotations
+        categories = annotations['categories']  # Get the list of categories
+        for category in categories:
+            class_id = category['id']
+            class_name = category['name']
+            self.add_class("crack", class_id, class_name)
 
-    # Train or validation dataset?
-    assert subset in ["train", "val"]
-    dataset_dir = os.path.join(dataset_dir, subset)
+        # Train or validation dataset?
+        assert subset in ["train", "val"]
+        dataset_dir = os.path.join(dataset_dir, subset)
 
-    # Load images and bounding boxes
-    images = annotations['images']  # Images metadata
-    bboxes = annotations['annotations']  # Bounding boxes
+        # Load images and bounding boxes
+        images = annotations['images']  # Images metadata
+        bboxes = annotations['annotations']  # Bounding boxes
 
-    # Add images and corresponding bounding boxes
-    for image_info in images:
-        image_id = image_info['id']
-        image_path = os.path.join(dataset_dir, image_info['file_name'])
-        height = image_info['height']
-        width = image_info['width']
+        # Add images and corresponding bounding boxes
+        for image_info in images:
+            image_id = image_info['id']
+            image_path = os.path.join(dataset_dir, image_info['file_name'])
+            height = image_info['height']
+            width = image_info['width']
 
-        # Get the bounding boxes for this image
-        image_bboxes = [bbox for bbox in bboxes if bbox['image_id'] == image_id]
+            # Get the bounding boxes for this image
+            image_bboxes = [bbox for bbox in bboxes if bbox['image_id'] == image_id]
 
-        # Add the image
-        self.add_image(
-            "crack",
-            image_id=image_id,
-            path=image_path,
-            width=width,
-            height=height,
-            bboxes=image_bboxes  # Attach bounding boxes
-        )
+            # Add the image
+            self.add_image(
+                "crack",
+                image_id=image_id,
+                path=image_path,
+                width=width,
+                height=height,
+                bboxes=image_bboxes  # Attach bounding boxes
+            )
 
 
     def load_mask(self, image_id):
