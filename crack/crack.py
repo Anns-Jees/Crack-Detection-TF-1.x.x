@@ -104,7 +104,9 @@ class CrackDataset(utils.Dataset):
         
         # Train or validation dataset?
         assert subset in ["train", "val"]
-        dataset_dir = os.path.join(dataset_dir, subset)
+        
+        # Add the subset directory ('train' or 'val') without repeating 'train/train'
+        dataset_dir = os.path.join(dataset_dir, subset)  # This should be fine if dataset_dir is '/root/Crack-Detection-TF-1.x.x/dataset/dataset'
         
         # Load images and bounding boxes
         images = annotations['images']  # Images metadata
@@ -113,7 +115,7 @@ class CrackDataset(utils.Dataset):
         # Add images and corresponding bounding boxes
         for image_info in images:
             image_id = image_info['id']
-            image_path = os.path.join(dataset_dir, image_info['file_name'])
+            image_path = os.path.join(dataset_dir, 'train', image_info['file_name'])
             height = image_info['height']
             width = image_info['width']
             
@@ -121,7 +123,6 @@ class CrackDataset(utils.Dataset):
             image_bboxes = []
             for bbox in bboxes:
                 if bbox['image_id'] == image_id:
-                    # If bounding box format is [x, y, width, height], you may need to adjust this based on your dataset format
                     x, y, w, h = bbox['bbox']
                     image_bboxes.append({
                         'class_id': bbox['category_id'],
@@ -137,6 +138,7 @@ class CrackDataset(utils.Dataset):
                 height=height,
                 bboxes=image_bboxes  # Attach bounding boxes
             )
+
     '''
     def load_image(self, image_id):
         """Load and return the image."""
