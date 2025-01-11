@@ -2073,7 +2073,22 @@ class MaskRCNN():
         
         # Retrieve rpn_match and rpn_class_logits from the forward pass (or a relevant layer)
         # You may need to modify this based on how they are returned in your model
-        rpn_match, rpn_class_logits = self.get_rpn_outputs()  # Placeholder for the actual method
+        # Define anchor_stride, anchors_per_location, and depth
+        anchor_stride = 1  # Typically 1 or 2
+        anchors_per_location = 9  # Number of anchors per pixel location (based on your config)
+        depth = 256  # Depth of the feature map (from your backbone network)
+
+        # Get the feature map (this should be the output of your backbone network)
+        input_feature_map = some_backbone_model_output  # Replace this with your actual feature map variable
+
+        # Build the RPN model
+        rpn_model = build_rpn_model(anchor_stride, anchors_per_location, depth)
+
+        # Get the RPN outputs
+        rpn_class_logits, rpn_probs, rpn_bbox = rpn_model(input_feature_map)
+
+# You can now use `rpn_class_logits` and `rpn_bbox` wherever necessary in place of `rpn_match` and `rpn_class_logits`
+ # Placeholder for the actual method
 
         for name in loss_names:
             if name == "rpn_class_loss":
