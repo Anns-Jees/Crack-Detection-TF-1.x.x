@@ -2046,7 +2046,8 @@ class MaskRCNN():
         # Optimizer object
         optimizer = keras.optimizers.SGD(
     learning_rate=learning_rate, momentum=momentum,
-    clipnorm=config.GRADIENT_CLIP_NORM)
+    clipnorm=self.config.GRADIENT_CLIP_NORM)
+
 
         # Add Losses
         # First, clear previously set losses to avoid duplication
