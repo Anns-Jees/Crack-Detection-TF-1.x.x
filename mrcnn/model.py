@@ -2254,7 +2254,7 @@ class MaskRCNN():
             callbacks += custom_callbacks
 
         # Create the feature map from resnet_graph
-        model_input = train_dataset.image
+        model_input = train_dataset.load_image(image_id)
         feature_maps = resnet_graph(model_input, architecture="resnet50", stage5=False, train_bn=True)
         
         # Select C4 as the feature map for RPN
