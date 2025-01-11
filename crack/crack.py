@@ -115,7 +115,7 @@ class CrackDataset(utils.Dataset):
         # Add images and corresponding bounding boxes
         for image_info in images:
             image_id = image_info['id']
-            image_path = os.path.join(dataset_dir, 'train', image_info['file_name'])
+            image_path = os.path.join(dataset_dir, image_info['file_name'])
             height = image_info['height']
             width = image_info['width']
             
