@@ -2204,62 +2204,37 @@ class MaskRCNN():
             "*epoch*", "{epoch:04d}")
 
     def train(self, train_dataset, val_dataset, learning_rate, epochs, layers,
-              augmentation=None, custom_callbacks=None, no_augmentation_sources=None):
+          augmentation=None, custom_callbacks=None, no_augmentation_sources=None):
         """Train the model.
         train_dataset, val_dataset: Training and validation Dataset objects.
         learning_rate: The learning rate to train with
-        epochs: Number of training epochs. Note that previous training epochs
-                are considered to be done alreay, so this actually determines
-                the epochs to train in total rather than in this particaular
-                call.
-        layers: Allows selecting wich layers to train. It can be:
-            - A regular expression to match layer names to train
-            - One of these predefined values:
-              heads: The RPN, classifier and mask heads of the network
-              all: All the layers
-              3+: Train Resnet stage 3 and up
-              4+: Train Resnet stage 4 and up
-              5+: Train Resnet stage 5 and up
-        augmentation: Optional. An imgaug (https://github.com/aleju/imgaug)
-            augmentation. For example, passing imgaug.augmenters.Fliplr(0.5)
-            flips images right/left 50% of the time. You can pass complex
-            augmentations as well. This augmentation applies 50% of the
-            time, and when it does it flips images right/left half the time
-            and adds a Gaussian blur with a random sigma in range 0 to 5.
-
-                augmentation = imgaug.augmenters.Sometimes(0.5, [
-                    imgaug.augmenters.Fliplr(0.5),
-                    imgaug.augmenters.GaussianBlur(sigma=(0.0, 5.0))
-                ])
-	    custom_callbacks: Optional. Add custom callbacks to be called
-	        with the keras fit_generator method. Must be list of type keras.callbacks.
-        no_augmentation_sources: Optional. List of sources to exclude for
-            augmentation. A source is string that identifies a dataset and is
-            defined in the Dataset class.
+        epochs: Number of training epochs.
+        layers: Allows selecting which layers to train.
+        augmentation: Optional. An imgaug augmentation.
+        custom_callbacks: Optional. Custom callbacks for keras fit_generator.
+        no_augmentation_sources: Optional. List of sources to exclude for augmentation.
         """
         assert self.mode == "training", "Create model in training mode."
 
         # Pre-defined layer regular expressions
         layer_regex = {
-            # all layers but the backbone
             "heads": r"(mrcnn\_.*)|(rpn\_.*)|(fpn\_.*)",
-            # From a specific Resnet stage and up
             "3+": r"(res3.*)|(bn3.*)|(res4.*)|(bn4.*)|(res5.*)|(bn5.*)|(mrcnn\_.*)|(rpn\_.*)|(fpn\_.*)",
             "4+": r"(res4.*)|(bn4.*)|(res5.*)|(bn5.*)|(mrcnn\_.*)|(rpn\_.*)|(fpn\_.*)",
             "5+": r"(res5.*)|(bn5.*)|(mrcnn\_.*)|(rpn\_.*)|(fpn\_.*)",
-            # All layers
             "all": ".*",
         }
+
         if layers in layer_regex.keys():
             layers = layer_regex[layers]
 
         # Data generators
         train_generator = data_generator(train_dataset, self.config, shuffle=True,
-                                         augmentation=augmentation,
-                                         batch_size=self.config.BATCH_SIZE,
-                                         no_augmentation_sources=no_augmentation_sources)
+                                        augmentation=augmentation,
+                                        batch_size=self.config.BATCH_SIZE,
+                                        no_augmentation_sources=no_augmentation_sources)
         val_generator = data_generator(val_dataset, self.config, shuffle=True,
-                                       batch_size=self.config.BATCH_SIZE)
+                                    batch_size=self.config.BATCH_SIZE)
 
         # Create log_dir if it does not exist
         if not os.path.exists(self.log_dir):
@@ -2267,19 +2242,25 @@ class MaskRCNN():
 
         # Callbacks
         callbacks = [
-    keras.callbacks.TensorBoard(log_dir=self.log_dir,
-                                histogram_freq=0, write_graph=True, write_images=False),
-    # Ensure checkpoint_path ends with .weights.h5
-    keras.callbacks.ModelCheckpoint(self.checkpoint_path.replace('.h5', '.weights.h5'),
-                                    verbose=0, save_weights_only=True),
-]
-
+            keras.callbacks.TensorBoard(log_dir=self.log_dir,
+                                        histogram_freq=0, write_graph=True, write_images=False),
+            # Ensure checkpoint_path ends with .weights.h5
+            keras.callbacks.ModelCheckpoint(self.checkpoint_path.replace('.h5', '.weights.h5'),
+                                            verbose=0, save_weights_only=True),
+        ]
 
         # Add custom callbacks to the list
         if custom_callbacks:
             callbacks += custom_callbacks
 
-        # Train
+        # Create the feature map from resnet_graph
+        model_input = train_dataset.image
+        feature_maps = resnet_graph(model_input, architecture="resnet50", stage5=False, train_bn=True)
+        
+        # Select C4 as the feature map for RPN
+        input_feature_map = feature_maps[3]  # C4 corresponds to index 3 in the list
+
+        # Log and prepare for training
         log("\nStarting at epoch {}. LR={}\n".format(self.epoch, learning_rate))
         log("Checkpoint Path: {}".format(self.checkpoint_path))
         self.set_trainable(layers)
@@ -2293,18 +2274,18 @@ class MaskRCNN():
         else:
             workers = multiprocessing.cpu_count()
 
-
+        # Train
         self.keras_model.fit(
-        train_generator,
-        initial_epoch=self.epoch,
-        epochs=epochs,
-        steps_per_epoch=self.config.STEPS_PER_EPOCH,
-        callbacks=callbacks,
-        validation_data=val_generator,
-        validation_steps=self.config.VALIDATION_STEPS,
-        max_queue_size=100,
-        workers=workers,
-        use_multiprocessing=True,
+            train_generator,
+            initial_epoch=self.epoch,
+            epochs=epochs,
+            steps_per_epoch=self.config.STEPS_PER_EPOCH,
+            callbacks=callbacks,
+            validation_data=val_generator,
+            validation_steps=self.config.VALIDATION_STEPS,
+            max_queue_size=100,
+            workers=workers,
+            use_multiprocessing=True,
         )
 
         self.epoch = max(self.epoch, epochs)
