@@ -137,7 +137,7 @@ class CrackDataset(utils.Dataset):
                 height=height,
                 bboxes=image_bboxes  # Attach bounding boxes
             )
-    
+    '''
     def load_image(self, image_id):
         """Load and return the image."""
         # Get image path
@@ -150,7 +150,7 @@ class CrackDataset(utils.Dataset):
         # Convert the image to RGB (if needed)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         
-        return image
+        return image'''
     
     def load_mask(self, image_id):
         """Generate instance masks for an image.
