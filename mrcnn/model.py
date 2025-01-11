@@ -2205,15 +2205,7 @@ class MaskRCNN():
 
     def train(self, train_dataset, val_dataset, learning_rate, epochs, layers,
           augmentation=None, custom_callbacks=None, no_augmentation_sources=None):
-        """Train the model.
-        train_dataset, val_dataset: Training and validation Dataset objects.
-        learning_rate: The learning rate to train with
-        epochs: Number of training epochs.
-        layers: Allows selecting which layers to train.
-        augmentation: Optional. An imgaug augmentation.
-        custom_callbacks: Optional. Custom callbacks for keras fit_generator.
-        no_augmentation_sources: Optional. List of sources to exclude for augmentation.
-        """
+        """Train the model."""
         assert self.mode == "training", "Create model in training mode."
 
         # Pre-defined layer regular expressions
@@ -2244,7 +2236,6 @@ class MaskRCNN():
         callbacks = [
             keras.callbacks.TensorBoard(log_dir=self.log_dir,
                                         histogram_freq=0, write_graph=True, write_images=False),
-            # Ensure checkpoint_path ends with .weights.h5
             keras.callbacks.ModelCheckpoint(self.checkpoint_path.replace('.h5', '.weights.h5'),
                                             verbose=0, save_weights_only=True),
         ]
@@ -2253,26 +2244,28 @@ class MaskRCNN():
         if custom_callbacks:
             callbacks += custom_callbacks
 
-        # Create the feature map from resnet_graph
-        model_input = train_dataset.load_image(image_id)
-        feature_maps = resnet_graph(model_input, architecture="resnet50", stage5=False, train_bn=True)
-        
-        # Select C4 as the feature map for RPN
-        input_feature_map = feature_maps[3]  # C4 corresponds to index 3 in the list
+        # Loop through all images in the training dataset
+        for image_id in train_dataset.image_ids:
+            # Load the image and its feature map
+            model_input = train_dataset.load_image(image_id)
+            feature_maps = resnet_graph(model_input, architecture="resnet50", stage5=False, train_bn=True)
+            
+            # Select C4 as the feature map for RPN
+            input_feature_map = feature_maps[3]  # C4 corresponds to index 3 in the list
 
-        # Log and prepare for training
-        log("\nStarting at epoch {}. LR={}\n".format(self.epoch, learning_rate))
-        log("Checkpoint Path: {}".format(self.checkpoint_path))
-        self.set_trainable(layers)
-        self.compile(learning_rate, self.config.LEARNING_MOMENTUM)
+            # Log and prepare for training
+            log("\nStarting at epoch {}. LR={}\n".format(self.epoch, learning_rate))
+            log("Checkpoint Path: {}".format(self.checkpoint_path))
+            self.set_trainable(layers)
+            self.compile(learning_rate, self.config.LEARNING_MOMENTUM)
 
-        # Work-around for Windows: Keras fails on Windows when using
-        # multiprocessing workers. See discussion here:
-        # https://github.com/matterport/Mask_RCNN/issues/13#issuecomment-353124009
-        if os.name == "nt":
-            workers = 0
-        else:
-            workers = multiprocessing.cpu_count()
+            # Work-around for Windows: Keras fails on Windows when using
+            # multiprocessing workers. See discussion here:
+            # https://github.com/matterport/Mask_RCNN/issues/13#issuecomment-353124009
+            if os.name == "nt":
+                workers = 0
+            else:
+                workers = multiprocessing.cpu_count()
 
         # Train
         self.keras_model.fit(
