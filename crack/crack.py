@@ -133,7 +133,7 @@ class CrackDataset(utils.Dataset):
 
     def load_mask(self, image_id):
         """Generate instance masks for an image.
-       Returns:
+        Returns:
         masks: A bool array of shape [height, width, instance count] with
             one mask per instance.
         class_ids: a 1D array of class IDs of the instance masks.
@@ -143,19 +143,45 @@ class CrackDataset(utils.Dataset):
         if image_info["source"] != "crack":
             return super(self.__class__, self).load_mask(image_id)
 
-        # Convert polygons to a bitmap mask of shape
-        # [height, width, instance_count]
-        info = self.image_info[image_id]
-        mask = np.zeros([info["height"], info["width"], len(info["polygons"])],
-                        dtype=np.uint8)
-        for i, p in enumerate(info["polygons"]):
-            # Get indexes of pixels inside the polygon and set them to 1
-            rr, cc = skimage.draw.polygon(p['all_points_y'], p['all_points_x'])
-            mask[rr, cc, i] = 1
+        # **Changes start here**: Use bounding boxes to create masks.
+        bboxes = image_info['bboxes']  # Get bounding boxes from image_info
+        mask = np.zeros([image_info["height"], image_info["width"], len(bboxes)], dtype=np.uint8)
+
+        # Loop through each bounding box and create a rectangular mask
+        for i, bbox in enumerate(bboxes):
+            y1, x1, y2, x2 = bbox['bbox']  # Assuming the format is [ymin, xmin, ymax, xmax]
+            mask[y1:y2, x1:x2, i] = 1  # Set pixels inside the bounding box to 1
+
+        # **Changes end here**: Return the mask and class IDs.def load_mask(self, image_id):
+    """Generate instance masks for an image.
+    Returns:
+    masks: A bool array of shape [height, width, instance count] with
+        one mask per instance.
+    class_ids: a 1D array of class IDs of the instance masks.
+    """
+    # If not a crack dataset image, delegate to parent class.
+    image_info = self.image_info[image_id]
+    if image_info["source"] != "crack":
+        return super(self.__class__, self).load_mask(image_id)
+
+    # **Changes start here**: Use bounding boxes to create masks.
+    bboxes = image_info['bboxes']  # Get bounding boxes from image_info
+    mask = np.zeros([image_info["height"], image_info["width"], len(bboxes)], dtype=np.uint8)
+
+    # Loop through each bounding box and create a rectangular mask
+    for i, bbox in enumerate(bboxes):
+        y1, x1, y2, x2 = bbox['bbox']  # Assuming the format is [ymin, xmin, ymax, xmax]
+        mask[y1:y2, x1:x2, i] = 1  # Set pixels inside the bounding box to 1
+
+    # **Changes end here**: Return the mask and class IDs.
+    # Return mask, and array of class IDs of each instance. Since we have
+    # one class ID only, we return an array of 1s
+    return mask.astype(np.bool), np.ones([mask.shape[-1]], dtype=np.int32)
 
         # Return mask, and array of class IDs of each instance. Since we have
         # one class ID only, we return an array of 1s
         return mask.astype(np.bool), np.ones([mask.shape[-1]], dtype=np.int32)
+
 
     def image_reference(self, image_id):
         """Return the path of the image."""
@@ -212,6 +238,7 @@ def train(model):
   #  model.train(dataset_train, dataset_val, 
   #              learning_rate=config.LEARNING_RATE,
   #              epochs=200, 
+
   #              layers='all')
     
 def color_splash(image, mask):
