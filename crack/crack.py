@@ -90,8 +90,9 @@ model_inference = modellib.MaskRCNN(mode="inference", config=CrackConfig(), mode
 class CrackDataset(utils.Dataset):
 
     def load_crack(self, dataset_dir, subset):
+
         """Load a subset of the crack dataset using bounding boxes and dynamically add classes."""
-        
+
         # Load annotations (we expect a list of annotations in COCO format)
         annotations = json.load(open(os.path.join(dataset_dir, "via_region_data.json")))
 
@@ -118,7 +119,15 @@ class CrackDataset(utils.Dataset):
             width = image_info['width']
 
             # Get the bounding boxes for this image
-            image_bboxes = [bbox for bbox in bboxes if bbox['image_id'] == image_id]
+            image_bboxes = []
+            for bbox in bboxes:
+                if bbox['image_id'] == image_id:
+                    # If bounding box format is [x, y, width, height], you may need to adjust this based on your dataset format
+                    x, y, w, h = bbox['bbox']
+                    image_bboxes.append({
+                        'class_id': bbox['category_id'],
+                        'bbox': [x, y, w, h]
+                    })
 
             # Add the image
             self.add_image(
