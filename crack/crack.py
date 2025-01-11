@@ -90,34 +90,33 @@ model_inference = modellib.MaskRCNN(mode="inference", config=CrackConfig(), mode
 class CrackDataset(utils.Dataset):
 
     def load_crack(self, dataset_dir, subset):
-
         """Load a subset of the crack dataset using bounding boxes and dynamically add classes."""
-
+        
         # Load annotations (we expect a list of annotations in COCO format)
         annotations = json.load(open(os.path.join(dataset_dir, "via_region_data.json")))
-
+        
         # Dynamically add classes based on the 'categories' field in the annotations
         categories = annotations['categories']  # Get the list of categories
         for category in categories:
             class_id = category['id']
             class_name = category['name']
             self.add_class("crack", class_id, class_name)
-
+        
         # Train or validation dataset?
         assert subset in ["train", "val"]
         dataset_dir = os.path.join(dataset_dir, subset)
-
+        
         # Load images and bounding boxes
         images = annotations['images']  # Images metadata
         bboxes = annotations['annotations']  # Bounding boxes
-
+        
         # Add images and corresponding bounding boxes
         for image_info in images:
             image_id = image_info['id']
             image_path = os.path.join(dataset_dir, image_info['file_name'])
             height = image_info['height']
             width = image_info['width']
-
+            
             # Get the bounding boxes for this image
             image_bboxes = []
             for bbox in bboxes:
@@ -128,7 +127,7 @@ class CrackDataset(utils.Dataset):
                         'class_id': bbox['category_id'],
                         'bbox': [x, y, w, h]
                     })
-
+            
             # Add the image
             self.add_image(
                 "crack",
@@ -138,8 +137,21 @@ class CrackDataset(utils.Dataset):
                 height=height,
                 bboxes=image_bboxes  # Attach bounding boxes
             )
-
-
+    
+    def load_image(self, image_id):
+        """Load and return the image."""
+        # Get image path
+        image_info = self.image_info[image_id]
+        image_path = image_info["path"]
+        
+        # Load the image using OpenCV
+        image = cv2.imread(image_path)
+        
+        # Convert the image to RGB (if needed)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        
+        return image
+    
     def load_mask(self, image_id):
         """Generate instance masks for an image.
         Returns:
@@ -147,25 +159,20 @@ class CrackDataset(utils.Dataset):
             one mask per instance.
         class_ids: a 1D array of class IDs of the instance masks.
         """
-        # If not a crack dataset image, delegate to parent class.
+        # Get the image's bounding boxes
         image_info = self.image_info[image_id]
-        if image_info["source"] != "crack":
-            return super(self.__class__, self).load_mask(image_id)
-
-        # **Changes start here**: Use bounding boxes to create masks.
-        bboxes = image_info['bboxes']  # Get bounding boxes from image_info
+        bboxes = image_info['bboxes']
+        
+        # Initialize the mask
         mask = np.zeros([image_info["height"], image_info["width"], len(bboxes)], dtype=np.uint8)
-
+        
         # Loop through each bounding box and create a rectangular mask
         for i, bbox in enumerate(bboxes):
             y1, x1, y2, x2 = bbox['bbox']  # Assuming the format is [ymin, xmin, ymax, xmax]
             mask[y1:y2, x1:x2, i] = 1  # Set pixels inside the bounding box to 1
-
-        # **Changes end here**: Return the mask and class IDs.
-        # Return mask, and array of class IDs of each instance. Since we have
-        # one class ID only, we return an array of 1s
+        
+        # Return mask and class IDs
         return mask.astype(np.bool), np.ones([mask.shape[-1]], dtype=np.int32)
-
 
     def image_reference(self, image_id):
         """Return the path of the image."""
@@ -174,7 +181,6 @@ class CrackDataset(utils.Dataset):
             return info["path"]
         else:
             super(self.__class__, self).image_reference(image_id)
-
 
 def train(model):
     """Train the model."""
