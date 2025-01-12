@@ -2103,9 +2103,10 @@ class MaskRCNN():
                                 cache_subdir='models',
                                 md5_hash='a268eb855778b3df3c7506639542a6af')
         return weights_path
-    import numpy as np
+
 
     def compute_iou(box1, box2):
+        
         """
         Computes the Intersection over Union (IoU) between two boxes.
         Each box is represented as [y1, x1, y2, x2] (top-left, bottom-right).
@@ -2123,14 +2124,13 @@ class MaskRCNN():
         iou = intersection_area / union_area
         return iou
 
-    def match_anchors_to_ground_truth(input_feature_map, gt_boxes, anchor_boxes, iou_threshold=0.5):
+    def match_anchors_to_ground_truth(anchor_boxes, gt_boxes, iou_threshold=0.5):
         """
         Matches anchor boxes to ground truth boxes based on IoU.
         
         Args:
-            input_feature_map: Feature map from the backbone.
-            gt_boxes: Ground truth bounding boxes.
             anchor_boxes: Predefined anchor boxes.
+            gt_boxes: Ground truth bounding boxes.
             iou_threshold: IoU threshold for positive match.
             
         Returns:
@@ -2154,6 +2154,7 @@ class MaskRCNN():
                 rpn_match[i] = 0  # No match (negative background anchor)
         
         return rpn_match
+
     def compute_bbox_deltas(anchor, gt_box):
         """
         Computes the bounding box deltas (dx, dy, dw, dh) for the anchor box.
@@ -2186,13 +2187,12 @@ class MaskRCNN():
         return deltas
 
 
-    # This is where you define the rpn_target_layers function
-    def rpn_target_layers(input_feature_map, gt_boxes, gt_class_ids, config):
+    def rpn_target_layers(anchor_boxes, gt_boxes, gt_class_ids, config):
         """
         Matches anchors to ground truth boxes and computes the bounding box deltas.
         
         Args:
-            input_feature_map: Feature map from the backbone (e.g., C2 layer).
+            anchor_boxes: Predefined anchor boxes.
             gt_boxes: Ground truth bounding boxes for training.
             gt_class_ids: Ground truth class IDs (e.g., for each box).
             config: Configuration containing RPN settings.
@@ -2201,9 +2201,22 @@ class MaskRCNN():
             rpn_match: The matching anchors for the ground truth boxes.
             rpn_bbox: The bounding box deltas (offsets from the anchors).
         """
-        rpn_match = match_anchors_to_ground_truth(input_feature_map, gt_boxes)  # anchor matching
-        rpn_bbox = compute_bbox_deltas(input_feature_map, gt_boxes)  # compute bounding box deltas
-        return rpn_match, rpn_bbox
+        rpn_match = match_anchors_to_ground_truth(anchor_boxes, gt_boxes, config.RPN_IOU_THRESHOLD)  # anchor matching
+        rpn_bbox = []
+        
+        for i in range(len(rpn_match)):
+            if rpn_match[i] == 1:
+                deltas = compute_bbox_deltas(anchor_boxes[i], gt_boxes[i])
+                rpn_bbox.append(deltas)
+            else:
+                rpn_bbox.append([0, 0, 0, 0])
+        
+        return rpn_match, np.array(rpn_bbox)
+
+
+    # Ensure you place the above function in your `model.py` where it's needed or import it properly if you're defining it in another file.
+
+
     def compile(self, learning_rate, momentum, dataset_train):
         """Gets the model ready for training. Adds losses, regularization, and
         metrics. Then calls the Keras compile() function.
