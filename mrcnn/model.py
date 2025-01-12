@@ -2076,7 +2076,7 @@ class MaskRCNN():
         
         # Build the ResNet graph
         backbone_output = resnet_graph(input_image, architecture='resnet50', stage5=True, train_bn=True)
-        input_feature_map = backbone_output  # Use the output of the ResNet backbone
+        input_feature_map = backbone_output[3]  # Use the output of the ResNet backbone
 
         # Build the RPN model
         anchor_stride = 1
