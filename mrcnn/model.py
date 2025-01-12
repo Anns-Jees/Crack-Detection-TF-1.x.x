@@ -2103,6 +2103,89 @@ class MaskRCNN():
                                 cache_subdir='models',
                                 md5_hash='a268eb855778b3df3c7506639542a6af')
         return weights_path
+    import numpy as np
+
+    def compute_iou(box1, box2):
+        """
+        Computes the Intersection over Union (IoU) between two boxes.
+        Each box is represented as [y1, x1, y2, x2] (top-left, bottom-right).
+        """
+        y1_inter = max(box1[0], box2[0])
+        x1_inter = max(box1[1], box2[1])
+        y2_inter = min(box1[2], box2[2])
+        x2_inter = min(box1[3], box2[3])
+
+        intersection_area = max(0, y2_inter - y1_inter) * max(0, x2_inter - x1_inter)
+        box1_area = (box1[2] - box1[0]) * (box1[3] - box1[1])
+        box2_area = (box2[2] - box2[0]) * (box2[3] - box2[1])
+
+        union_area = box1_area + box2_area - intersection_area
+        iou = intersection_area / union_area
+        return iou
+
+    def match_anchors_to_ground_truth(input_feature_map, gt_boxes, anchor_boxes, iou_threshold=0.5):
+        """
+        Matches anchor boxes to ground truth boxes based on IoU.
+        
+        Args:
+            input_feature_map: Feature map from the backbone.
+            gt_boxes: Ground truth bounding boxes.
+            anchor_boxes: Predefined anchor boxes.
+            iou_threshold: IoU threshold for positive match.
+            
+        Returns:
+            rpn_match: The match labels for each anchor.
+        """
+        rpn_match = np.zeros(len(anchor_boxes), dtype=int)  # Initialize all anchors as background (0)
+        
+        for i, anchor in enumerate(anchor_boxes):
+            max_iou = 0
+            best_gt_idx = -1
+            
+            for j, gt_box in enumerate(gt_boxes):
+                iou = compute_iou(anchor, gt_box)
+                if iou > max_iou:
+                    max_iou = iou
+                    best_gt_idx = j
+            
+            if max_iou > iou_threshold:
+                rpn_match[i] = 1  # Positive match (anchor matched to a ground truth box)
+            elif best_gt_idx == -1:
+                rpn_match[i] = 0  # No match (negative background anchor)
+        
+        return rpn_match
+    def compute_bbox_deltas(anchor, gt_box):
+        """
+        Computes the bounding box deltas (dx, dy, dw, dh) for the anchor box.
+        
+        Args:
+            anchor: The anchor box, represented as [y1, x1, y2, x2].
+            gt_box: The ground truth box, represented as [y1, x1, y2, x2].
+            
+        Returns:
+            deltas: A list [dx, dy, dw, dh] representing the deltas.
+        """
+        # Compute center coordinates (cx, cy) and width/height for both anchor and ground truth box
+        anchor_cy = (anchor[0] + anchor[2]) / 2
+        anchor_cx = (anchor[1] + anchor[3]) / 2
+        anchor_h = anchor[2] - anchor[0]
+        anchor_w = anchor[3] - anchor[1]
+
+        gt_cy = (gt_box[0] + gt_box[2]) / 2
+        gt_cx = (gt_box[1] + gt_box[3]) / 2
+        gt_h = gt_box[2] - gt_box[0]
+        gt_w = gt_box[3] - gt_box[1]
+        
+        # Compute deltas (dx, dy, dw, dh)
+        dx = (gt_cx - anchor_cx) / anchor_w
+        dy = (gt_cy - anchor_cy) / anchor_h
+        dw = np.log(gt_w / anchor_w)
+        dh = np.log(gt_h / anchor_h)
+
+        deltas = [dx, dy, dw, dh]
+        return deltas
+
+
     # This is where you define the rpn_target_layers function
     def rpn_target_layers(input_feature_map, gt_boxes, gt_class_ids, config):
         """
