@@ -2126,15 +2126,14 @@ class MaskRCNN():
         return iou
     @tf.function
     def match_anchors_to_ground_truth(self, anchor_boxes, gt_boxes, iou_threshold=None):
-
         """
         Matches anchor boxes to ground truth boxes based on IoU.
-        
+
         Args:
             anchor_boxes: Predefined anchor boxes.
             gt_boxes: Ground truth bounding boxes.
             iou_threshold: IoU threshold for positive match. If None, uses RPN_NMS_THRESHOLD from config.
-            
+
         Returns:
             rpn_match: The match labels for each anchor.
         """
@@ -2142,26 +2141,25 @@ class MaskRCNN():
         if iou_threshold is None:
             iou_threshold = config.RPN_NMS_THRESHOLD
 
+        # Initialize rpn_match with zeros (no matches)
         rpn_match = tf.zeros(tf.shape(anchor_boxes)[0], dtype=tf.int32)
 
-        
-        for i, anchor in enumerate(anchor_boxes):
-            max_iou = 0
-            best_gt_idx = -1
-            
-            for j, gt_box in enumerate(gt_boxes):
-                iou = compute_iou(anchor, gt_box)
-                if iou > max_iou:
-                    max_iou = iou
-                    best_gt_idx = j
-            
-            if max_iou > iou_threshold:
-                rpn_match[i] = 1  # Positive match (anchor matched to a ground truth box)
-            elif best_gt_idx == -1:
-                rpn_match[i] = 0  # No match (negative background anchor)
-        
-        return rpn_match
+        # Compute IoU between all anchor boxes and ground truth boxes
+        iou_matrix = compute_iou_batch(anchor_boxes, gt_boxes)  # Compute IoU for each anchor with each ground truth box
 
+        # Find the best matching ground truth for each anchor (the one with highest IoU)
+        max_iou_values = tf.reduce_max(iou_matrix, axis=1)  # Max IoU per anchor
+        best_gt_indices = tf.argmax(iou_matrix, axis=1)  # Index of best ground truth match for each anchor
+
+        # Apply matching logic based on IoU threshold
+        positive_matches = tf.greater(max_iou_values, iou_threshold)  # Positive matches based on IoU threshold
+        rpn_match = tf.where(positive_matches, tf.ones_like(rpn_match), rpn_match)  # Set positive matches to 1
+
+        # Handle anchors with no matches (negative background)
+        no_match = tf.equal(best_gt_indices, -1)  # Anchors with no matching ground truth box
+        rpn_match = tf.where(no_match, tf.zeros_like(rpn_match), rpn_match)  # Set no match anchors to 0
+
+        return rpn_match
 
     def compute_bbox_deltas(self, anchor, gt_box):
         """
