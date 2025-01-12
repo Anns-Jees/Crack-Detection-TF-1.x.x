@@ -1858,7 +1858,9 @@ class MaskRCNN():
 
         # RPN Model
         rpn = build_rpn_model(config.RPN_ANCHOR_STRIDE,
-                              len(config.RPN_ANCHOR_RATIOS), config.TOP_DOWN_PYRAMID_SIZE)
+                      config.RPN_ANCHOR_SCALES,   # Pass anchor scales
+                      config.RPN_ANCHOR_RATIOS,   # Pass anchor ratios
+                      config.TOP_DOWN_PYRAMID_SIZE)
         # Loop through pyramid layers
         layer_outputs = []  # list of lists
         for p in rpn_feature_maps:
