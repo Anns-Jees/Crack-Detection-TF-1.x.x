@@ -2072,7 +2072,6 @@ class MaskRCNN():
         rpn_match = match_anchors_to_ground_truth(input_feature_map, gt_boxes)  # anchor matching
         rpn_bbox = compute_bbox_deltas(input_feature_map, gt_boxes)  # compute bounding box deltas
         return rpn_match, rpn_bbox
-
     def compile(self, learning_rate, momentum, dataset_train):
         """Gets the model ready for training. Adds losses, regularization, and
         metrics. Then calls the Keras compile() function.
@@ -2094,7 +2093,7 @@ class MaskRCNN():
         
         # Build the ResNet graph
         backbone_output = resnet_graph(input_image, architecture='resnet50', stage5=True, train_bn=True)
-        input_feature_map = backbone_output[1] # Use the output of the ResNet backbone
+        input_feature_map = backbone_output[1]  # Use the output of the ResNet backbone
 
         # Build the RPN model
         anchor_stride = 1
@@ -2105,25 +2104,26 @@ class MaskRCNN():
         # Get the RPN outputs
         rpn_class_logits, rpn_probs, rpn_bbox = rpn_model(input_feature_map)
 
-        # Fetch the ground truth data from dataset_train
-        gt_boxes = dataset_train.get_gt_boxes()  # Get ground truth bounding boxes
-        gt_class_ids = dataset_train.get_gt_class_ids()  # Get ground truth class ids
+        # Assume `gt_boxes` and `gt_class_ids` are available from your dataset
+        for image_id in dataset_train.image_ids:
+            gt_boxes = dataset_train.get_gt_boxes(image_id)  # Get ground truth bounding boxes
+            gt_class_ids = dataset_train.get_gt_class_ids(image_id)  # Get ground truth class ids
 
-        # Get the RPN match and bbox deltas
-        rpn_match, rpn_bbox = rpn_target_layers(input_feature_map, gt_boxes, gt_class_ids, self.config)
+            # Get the RPN match and bbox deltas
+            rpn_match, rpn_bbox = rpn_target_layers(input_feature_map, gt_boxes, gt_class_ids, self.config)
 
-        # For each loss name, calculate the loss (make sure loss functions are correct)
-        for name in loss_names:
-            if name == "rpn_class_loss":
-                # Now use the `rpn_match` in the RPN class loss calculation
-                loss = rpn_class_loss_graph(rpn_match, rpn_class_logits)  # Ensure rpn_match is passed here
-            else:
-                layer = self.keras_model.get_layer(name)
-                loss = (
-                    tf.reduce_mean(layer.output, keepdims=True)
-                    * self.config.LOSS_WEIGHTS.get(name, 1.))
+            # For each loss name, calculate the loss (make sure loss functions are correct)
+            for name in loss_names:
+                if name == "rpn_class_loss":
+                    # Now use the `rpn_match` in the RPN class loss calculation
+                    loss = rpn_class_loss_graph(rpn_match, rpn_class_logits)  # Ensure rpn_match is passed here
+                else:
+                    layer = self.keras_model.get_layer(name)
+                    loss = (
+                        tf.reduce_mean(layer.output, keepdims=True)
+                        * self.config.LOSS_WEIGHTS.get(name, 1.))
 
-            self.keras_model.add_loss(loss)
+                self.keras_model.add_loss(loss)
 
         # Add L2 Regularization
         reg_losses = [
