@@ -749,6 +749,39 @@ class DetectionLayer(KL.Layer):
     def compute_output_shape(self, input_shape):
         return (None, self.config.DETECTION_MAX_INSTANCES, 6)
 ############################################################
+#  Anchor Generation for RPN
+############################################################
+
+def get_anchors(feature_map_shape, anchor_scales, anchor_ratios):
+        """
+        Generate anchor boxes for RPN.
+
+        Args:
+        - feature_map_shape: tuple (height, width) of the RPN feature map
+        - anchor_scales: list of scales for the anchors
+        - anchor_ratios: list of aspect ratios for the anchors
+
+        Returns:
+        - anchors: numpy array of anchor boxes (num_anchors, 4)
+        """
+        height, width = feature_map_shape
+        anchors = []
+
+        for scale in anchor_scales:
+            for ratio in anchor_ratios:
+                w = scale * np.sqrt(ratio)  # Width of the anchor
+                h = scale / np.sqrt(ratio)  # Height of the anchor
+                anchors.append([0, 0, w, h])  # [y_min, x_min, y_max, x_max]
+
+        anchors = np.array(anchors)
+        anchors[:, 0] = -anchors[:, 2] / 2  # y_min = -height / 2
+        anchors[:, 1] = -anchors[:, 3] / 2  # x_min = -width / 2
+        anchors[:, 2] = anchors[:, 2] / 2  # y_max = height / 2
+        anchors[:, 3] = anchors[:, 3] / 2  # x_max = width / 2
+
+        return anchors
+
+############################################################
 #  Region Proposal Network (RPN)
 ############################################################
 
@@ -796,27 +829,19 @@ def rpn_graph(feature_map, anchors_per_location, anchor_stride):
     return [rpn_class_logits, rpn_probs, rpn_bbox]
 
 
-def build_rpn_model(anchor_stride, anchors_per_location, depth):
-    """Builds a Keras model of the Region Proposal Network.
-    It wraps the RPN graph so it can be used multiple times with shared
-    weights.
-
-    anchors_per_location: number of anchors per pixel in the feature map
-    anchor_stride: Controls the density of anchors. Typically 1 (anchors for
-                   every pixel in the feature map), or 2 (every other pixel).
-    depth: Depth of the backbone feature map.
-
-    Returns a Keras Model object. The model outputs, when called, are:
-    rpn_class_logits: [batch, H * W * anchors_per_location, 2] Anchor classifier logits (before softmax)
-    rpn_probs: [batch, H * W * anchors_per_location, 2] Anchor classifier probabilities.
-    rpn_bbox: [batch, H * W * anchors_per_location, (dy, dx, log(dh), log(dw))] Deltas to be
-                applied to anchors.
-    """
+def build_rpn_model(anchor_stride, anchors_per_location, depth, anchor_scales, anchor_ratios):
+    """Builds a Keras model of the Region Proposal Network."""
     input_feature_map = KL.Input(shape=[None, None, depth],
                                  name="input_rpn_feature_map")
-    outputs = rpn_graph(input_feature_map, anchors_per_location, anchor_stride)
-    return KM.Model([input_feature_map], outputs, name="rpn_model")
 
+    # Generate anchors based on the feature map size and the scales/ratios
+    feature_map_shape = input_feature_map.shape[1:3]  # (height, width)
+    anchors = get_anchors(feature_map_shape, anchor_scales, anchor_ratios)
+
+    # Build the RPN graph
+    outputs = rpn_graph(input_feature_map, anchors_per_location, anchor_stride)
+
+    return KM.Model([input_feature_map], outputs, name="rpn_model")
 ############################################################
 #  Feature Pyramid Network Heads
 ############################################################
