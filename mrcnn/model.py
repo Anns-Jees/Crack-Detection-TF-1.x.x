@@ -2073,7 +2073,7 @@ class MaskRCNN():
         rpn_bbox = compute_bbox_deltas(input_feature_map, gt_boxes)  # compute bounding box deltas
         return rpn_match, rpn_bbox
 
-    def compile(self, learning_rate, momentum):
+    def compile(self, learning_rate, momentum, dataset_train):
         """Gets the model ready for training. Adds losses, regularization, and
         metrics. Then calls the Keras compile() function.
         """
@@ -2105,9 +2105,9 @@ class MaskRCNN():
         # Get the RPN outputs
         rpn_class_logits, rpn_probs, rpn_bbox = rpn_model(input_feature_map)
 
-        # Assume `gt_boxes` and `gt_class_ids` are available from your dataset
-        gt_boxes = dataset.get_gt_boxes()  # Get ground truth bounding boxes
-        gt_class_ids = dataset.get_gt_class_ids()  # Get ground truth class ids
+        # Fetch the ground truth data from dataset_train
+        gt_boxes = dataset_train.get_gt_boxes()  # Get ground truth bounding boxes
+        gt_class_ids = dataset_train.get_gt_class_ids()  # Get ground truth class ids
 
         # Get the RPN match and bbox deltas
         rpn_match, rpn_bbox = rpn_target_layers(input_feature_map, gt_boxes, gt_class_ids, self.config)
@@ -2147,6 +2147,7 @@ class MaskRCNN():
                 tf.reduce_mean(layer.output, keepdims=True)
                 * self.config.LOSS_WEIGHTS.get(name, 1.))
             self.keras_model.metrics_tensors.append(loss)
+
 
     def set_trainable(self, layer_regex, keras_model=None, indent=0, verbose=1):
         """Sets model layers as trainable if their names match
@@ -2222,86 +2223,88 @@ class MaskRCNN():
             self.config.NAME.lower()))
         self.checkpoint_path = self.checkpoint_path.replace(
             "*epoch*", "{epoch:04d}")
-
     def train(self, train_dataset, val_dataset, learning_rate, epochs, layers,
-          augmentation=None, custom_callbacks=None, no_augmentation_sources=None):
-        """Train the model."""
-        assert self.mode == "training", "Create model in training mode."
+            augmentation=None, custom_callbacks=None, no_augmentation_sources=None):
+            """Train the model."""
+            assert self.mode == "training", "Create model in training mode."
 
-        # Pre-defined layer regular expressions
-        layer_regex = {
-            "heads": r"(mrcnn\_.*)|(rpn\_.*)|(fpn\_.*)",
-            "3+": r"(res3.*)|(bn3.*)|(res4.*)|(bn4.*)|(res5.*)|(bn5.*)|(mrcnn\_.*)|(rpn\_.*)|(fpn\_.*)",
-            "4+": r"(res4.*)|(bn4.*)|(res5.*)|(bn5.*)|(mrcnn\_.*)|(rpn\_.*)|(fpn\_.*)",
-            "5+": r"(res5.*)|(bn5.*)|(mrcnn\_.*)|(rpn\_.*)|(fpn\_.*)",
-            "all": ".*",
-        }
+            # Pre-defined layer regular expressions
+            layer_regex = {
+                "heads": r"(mrcnn\_.*)|(rpn\_.*)|(fpn\_.*)",
+                "3+": r"(res3.*)|(bn3.*)|(res4.*)|(bn4.*)|(res5.*)|(bn5.*)|(mrcnn\_.*)|(rpn\_.*)|(fpn\_.*)",
+                "4+": r"(res4.*)|(bn4.*)|(res5.*)|(bn5.*)|(mrcnn\_.*)|(rpn\_.*)|(fpn\_.*)",
+                "5+": r"(res5.*)|(bn5.*)|(mrcnn\_.*)|(rpn\_.*)|(fpn\_.*)",
+                "all": ".*",
+            }
 
-        if layers in layer_regex.keys():
-            layers = layer_regex[layers]
+            if layers in layer_regex.keys():
+                layers = layer_regex[layers]
 
-        # Data generators
-        train_generator = data_generator(train_dataset, self.config, shuffle=True,
-                                        augmentation=augmentation,
-                                        batch_size=self.config.BATCH_SIZE,
-                                        no_augmentation_sources=no_augmentation_sources)
-        val_generator = data_generator(val_dataset, self.config, shuffle=True,
-                                    batch_size=self.config.BATCH_SIZE)
+            # Data generators
+            train_generator = data_generator(train_dataset, self.config, shuffle=True,
+                                            augmentation=augmentation,
+                                            batch_size=self.config.BATCH_SIZE,
+                                            no_augmentation_sources=no_augmentation_sources)
+            val_generator = data_generator(val_dataset, self.config, shuffle=True,
+                                        batch_size=self.config.BATCH_SIZE)
 
-        # Create log_dir if it does not exist
-        if not os.path.exists(self.log_dir):
-            os.makedirs(self.log_dir)
+            # Create log_dir if it does not exist
+            if not os.path.exists(self.log_dir):
+                os.makedirs(self.log_dir)
 
-        # Callbacks
-        callbacks = [
-            keras.callbacks.TensorBoard(log_dir=self.log_dir,
-                                        histogram_freq=0, write_graph=True, write_images=False),
-            keras.callbacks.ModelCheckpoint(self.checkpoint_path.replace('.h5', '.weights.h5'),
-                                            verbose=0, save_weights_only=True),
-        ]
+            # Callbacks
+            callbacks = [
+                keras.callbacks.TensorBoard(log_dir=self.log_dir,
+                                            histogram_freq=0, write_graph=True, write_images=False),
+                keras.callbacks.ModelCheckpoint(self.checkpoint_path.replace('.h5', '.weights.h5'),
+                                                verbose=0, save_weights_only=True),
+            ]
 
-        # Add custom callbacks to the list
-        if custom_callbacks:
-            callbacks += custom_callbacks
+            # Add custom callbacks to the list
+            if custom_callbacks:
+                callbacks += custom_callbacks
 
-        # Loop through all images in the training dataset
-        for image_id in train_dataset.image_ids:
-            # Load the image and its feature map
-            model_input = train_dataset.load_image(image_id)
-            feature_maps = resnet_graph(model_input, architecture="resnet50", stage5=False, train_bn=True)
-            
-            # Select C4 as the feature map for RPN
-            input_feature_map = feature_maps[1]  # C4 corresponds to index 3 in the list
+            # Loop through all images in the training dataset
+            for image_id in train_dataset.image_ids:
+                # Load the image and its feature map
+                model_input = train_dataset.load_image(image_id)
+                feature_maps = resnet_graph(model_input, architecture="resnet50", stage5=False, train_bn=True)
+                
+                # Select C4 as the feature map for RPN
+                input_feature_map = feature_maps[1]  # C4 corresponds to index 3 in the list
 
-            # Log and prepare for training
-            log("\nStarting at epoch {}. LR={}\n".format(self.epoch, learning_rate))
-            log("Checkpoint Path: {}".format(self.checkpoint_path))
-            self.set_trainable(layers)
-            self.compile(learning_rate, self.config.LEARNING_MOMENTUM)
+                # Log and prepare for training
+                log("\nStarting at epoch {}. LR={}\n".format(self.epoch, learning_rate))
+                log("Checkpoint Path: {}".format(self.checkpoint_path))
+                self.set_trainable(layers)
+                
+                # Pass dataset_train to compile method to access ground truth data
+                self.compile(learning_rate, self.config.LEARNING_MOMENTUM, train_dataset)
 
-            # Work-around for Windows: Keras fails on Windows when using
-            # multiprocessing workers. See discussion here:
-            # https://github.com/matterport/Mask_RCNN/issues/13#issuecomment-353124009
-            if os.name == "nt":
-                workers = 0
-            else:
-                workers = multiprocessing.cpu_count()
+                # Work-around for Windows: Keras fails on Windows when using
+                # multiprocessing workers. See discussion here:
+                # https://github.com/matterport/Mask_RCNN/issues/13#issuecomment-353124009
+                if os.name == "nt":
+                    workers = 0
+                else:
+                    workers = multiprocessing.cpu_count()
 
-        # Train
-        self.keras_model.fit(
-            train_generator,
-            initial_epoch=self.epoch,
-            epochs=epochs,
-            steps_per_epoch=self.config.STEPS_PER_EPOCH,
-            callbacks=callbacks,
-            validation_data=val_generator,
-            validation_steps=self.config.VALIDATION_STEPS,
-            max_queue_size=100,
-            workers=workers,
-            use_multiprocessing=True,
-        )
+            # Train
+            self.keras_model.fit(
+                train_generator,
+                initial_epoch=self.epoch,
+                epochs=epochs,
+                steps_per_epoch=self.config.STEPS_PER_EPOCH,
+                callbacks=callbacks,
+                validation_data=val_generator,
+                validation_steps=self.config.VALIDATION_STEPS,
+                max_queue_size=100,
+                workers=workers,
+                use_multiprocessing=True,
+            )
 
-        self.epoch = max(self.epoch, epochs)
+            self.epoch = max(self.epoch, epochs)
+
 
     def mold_inputs(self, images):
         """Takes a list of images and modifies them to the format expected
