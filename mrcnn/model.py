@@ -1755,7 +1755,17 @@ class MaskRCNN():
         self.config = config
         self.model_dir = model_dir
         self.set_log_dir()
+        self.backbone_shapes = self.compute_backbone_shapes(config, config.IMAGE_SHAPE)
         self.keras_model = self.build(mode=mode, config=config)
+
+    def compute_backbone_shapes(self, config, image_shape):
+
+        """Computes the width and height of each stage of the backbone network."""
+        return np.array([
+            [int(math.ceil(image_shape[0] / stride)),
+            int(math.ceil(image_shape[1] / stride))]
+            for stride in config.BACKBONE_STRIDES])
+
 
     def lambda_output_shape(self, input_shape):
         # Assuming norm_boxes_graph outputs (batch_size, height, width, 4)
