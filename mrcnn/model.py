@@ -2076,7 +2076,7 @@ class MaskRCNN():
         
         # Build the ResNet graph
         backbone_output = resnet_graph(input_image, architecture='resnet50', stage5=True, train_bn=True)
-        input_feature_map = backbone_output[2] # Use the output of the ResNet backbone
+        input_feature_map = backbone_output[1] # Use the output of the ResNet backbone
 
         # Build the RPN model
         anchor_stride = 1
@@ -2246,7 +2246,7 @@ class MaskRCNN():
             feature_maps = resnet_graph(model_input, architecture="resnet50", stage5=False, train_bn=True)
             
             # Select C4 as the feature map for RPN
-            input_feature_map = feature_maps[2]  # C4 corresponds to index 3 in the list
+            input_feature_map = feature_maps[1]  # C4 corresponds to index 3 in the list
 
             # Log and prepare for training
             log("\nStarting at epoch {}. LR={}\n".format(self.epoch, learning_rate))
