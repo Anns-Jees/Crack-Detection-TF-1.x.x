@@ -2079,7 +2079,7 @@ class MaskRCNN():
         anchor_stride = 1  # Typically 1 or 2
         anchors_per_location = 9  # Number of anchors per pixel location (based on your config)
         depth = 256  # Depth of the feature map (from your backbone network)
-
+        backbone_output = resnet_graph(input_image, architecture='resnet50', stage5=True, train_bn=True)
         # Get the feature map (this should be the output of your backbone network)
         input_feature_map = some_backbone_model_output  # Replace this with your actual feature map variable
 
