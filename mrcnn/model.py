@@ -2258,7 +2258,7 @@ class MaskRCNN():
             gt_class_ids = dataset_train.get_gt_class_ids(image_id)  # Get ground truth class ids
 
             # Get the RPN match and bbox deltas
-            rpn_match, rpn_bbox = rpn_target_layers(input_feature_map, gt_boxes, gt_class_ids, self.config)
+            rpn_match, rpn_bbox = self.rpn_target_layers(input_feature_map, gt_boxes, gt_class_ids, self.config)
 
             # For each loss name, calculate the loss (make sure loss functions are correct)
             for name in loss_names:
