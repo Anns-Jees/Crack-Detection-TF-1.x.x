@@ -2201,12 +2201,12 @@ class MaskRCNN():
             rpn_match: The matching anchors for the ground truth boxes.
             rpn_bbox: The bounding box deltas (offsets from the anchors).
         """
-        rpn_match = match_anchors_to_ground_truth(anchor_boxes, gt_boxes, config.RPN_IOU_THRESHOLD)  # anchor matching
+        rpn_match = self.match_anchors_to_ground_truth(anchor_boxes, gt_boxes, config.RPN_IOU_THRESHOLD)  # anchor matching
         rpn_bbox = []
         
         for i in range(len(rpn_match)):
             if rpn_match[i] == 1:
-                deltas = compute_bbox_deltas(anchor_boxes[i], gt_boxes[i])
+                deltas =self.compute_bbox_deltas(anchor_boxes[i], gt_boxes[i])
                 rpn_bbox.append(deltas)
             else:
                 rpn_bbox.append([0, 0, 0, 0])
