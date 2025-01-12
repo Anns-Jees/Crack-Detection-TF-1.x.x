@@ -831,17 +831,14 @@ def rpn_graph(feature_map, anchors_per_location, anchor_stride):
 
 
 
-def build_rpn_model(anchor_stride, anchors_per_location, depth, anchor_scales, anchor_ratios):
 
+def build_rpn_model(anchor_stride, anchors_per_location, depth, anchor_scales, anchor_ratios):
     """Builds a Keras model of the Region Proposal Network."""
     input_feature_map = KL.Input(shape=[None, None, depth],
                                  name="input_rpn_feature_map")
 
-    # Add a convolution to reduce depth from 256 to 128 (if needed)
-    if depth == 256:
-        x = Conv2D(128, (1, 1), strides=(1, 1), padding="same", name="rpn_channel_reduction")(input_feature_map)
-    else:
-        x = input_feature_map
+    # Force reduction of the feature map depth to 128 channels
+    x = Conv2D(128, (1, 1), strides=(1, 1), padding="same", name="rpn_channel_reduction")(input_feature_map)
 
     # Generate anchors based on the feature map size and the scales/ratios
     feature_map_shape = x.shape[1:3]  # (height, width)
@@ -851,6 +848,7 @@ def build_rpn_model(anchor_stride, anchors_per_location, depth, anchor_scales, a
     outputs = rpn_graph(x, anchors_per_location, anchor_stride)
 
     return KM.Model([input_feature_map], outputs, name="rpn_model")
+
 
 ############################################################
 #  Feature Pyramid Network Heads
