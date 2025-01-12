@@ -1210,13 +1210,8 @@ def load_image_gt(dataset, config, image_id, augment=False, augmentation=None,
 
     return image, image_meta, class_ids, bbox, mask
 
-
-import numpy as np
-import tensorflow as tf
-import utils  # Assuming this contains necessary utility functions like box_refinement and resize
-
 def build_detection_targets(rpn_rois, gt_class_ids, gt_boxes, gt_masks, config):
-    
+
     """Generate targets for training Stage 2 classifier and mask heads.
     This is not used in normal training. It's useful for debugging or to train
     the Mask RCNN heads without using the RPN head.
