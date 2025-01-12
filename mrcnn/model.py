@@ -1878,7 +1878,7 @@ class MaskRCNN():
         # Loop through pyramid layers
         layer_outputs = []  # list of lists
         for p in rpn_feature_maps:
-            layer_outputs.append(rpn([p]))
+            layer_outputs.append(rpn_model([p]))
         # Concatenate layer outputs
         # Convert from list of lists of level outputs to list of lists
         # of outputs across levels.
