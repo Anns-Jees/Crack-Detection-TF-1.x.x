@@ -311,7 +311,6 @@ def detect_and_color_splash(model, image_path=None, video_path=None):
 if __name__ == '__main__':
     import argparse
 
-
     # Parse command line arguments
     parser = argparse.ArgumentParser(
         description='Train Mask R-CNN to detect cracks.')
@@ -385,18 +384,17 @@ if __name__ == '__main__':
     # Load weights
     print("Loading weights ", weights_path)
     if args.weights.lower() == "coco":
-      # Exclude layers that are dependent on the number of classes
-      model.load_weights(weights_path, 
-                        by_name=True, 
-                        exclude=["mrcnn_bbox_fc", "mrcnn_class_logits", "mrcnn_mask", "mrcnn_class"])
-
-
+        # Exclude the last layers because they require a matching
+        # number of classes
+        model.load_weights(weights_path, by_name=True, exclude=[ 
+            "mrcnn_class_logits", "mrcnn_bbox_fc",
+            "mrcnn_bbox", "mrcnn_mask"])
     else:
         model.load_weights(weights_path, by_name=True)
 
     # Train or evaluate
     if args.command == "train":
-        train(model)
+        train(model, config)  # Pass config to train() function
     elif args.command == "splash":
         detect_and_color_splash(model, image_path=args.image,
                                 video_path=args.video)
