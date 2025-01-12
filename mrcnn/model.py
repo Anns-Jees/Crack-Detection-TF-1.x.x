@@ -1878,7 +1878,7 @@ class MaskRCNN():
         rpn_model = build_rpn_model(
     anchor_stride=self.config.RPN_ANCHOR_STRIDE,
     anchors_per_location=len(self.config.RPN_ANCHOR_RATIOS),
-    depth=self.backbone_shapes[0][-1],  # Depth of the feature map
+    depth=256,  # Depth of the feature map
     anchor_scales=self.config.RPN_ANCHOR_SCALES,  # Add anchor scales
     anchor_ratios=self.config.RPN_ANCHOR_RATIOS   # Add anchor ratios
 )
@@ -2148,7 +2148,7 @@ class MaskRCNN():
         rpn_model = build_rpn_model(
     anchor_stride=config.RPN_ANCHOR_STRIDE,
     anchors_per_location=len(config.RPN_ANCHOR_RATIOS),
-    depth=backbone_shapes[0][-1],  # Feature map depth
+    depth=256,  # Feature map depth
     anchor_scales=config.RPN_ANCHOR_SCALES,
     anchor_ratios=config.RPN_ANCHOR_RATIOS
 )
