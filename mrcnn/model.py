@@ -2142,7 +2142,8 @@ class MaskRCNN():
         if iou_threshold is None:
             iou_threshold = config.RPN_NMS_THRESHOLD
 
-        rpn_match = np.zeros(len(anchor_boxes), dtype=int)  # Initialize all anchors as background (0)
+        rpn_match = np.zeros(tf.shape(anchor_boxes)[0], dtype=int)  # Get the first dimension of anchor_boxes
+
         
         for i, anchor in enumerate(anchor_boxes):
             max_iou = 0
