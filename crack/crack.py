@@ -101,7 +101,6 @@ class CrackDataset(utils.Dataset):
 
 
     def load_crack(self, dataset_dir, subset):
-            
         """Load a subset of the crack dataset using bounding boxes and dynamically add classes."""
         
         # Load annotations (we expect a list of annotations in COCO format)
@@ -133,6 +132,8 @@ class CrackDataset(utils.Dataset):
             
             # Get the bounding boxes for this image
             image_bboxes = []
+            image_class_ids = []  # List to store class IDs for each bounding box
+            
             for bbox in bboxes:
                 if bbox['image_id'] == image_id:
                     x, y, w, h = bbox['bbox']
@@ -140,15 +141,17 @@ class CrackDataset(utils.Dataset):
                         'class_id': bbox['category_id'],
                         'bbox': [x, y, w, h]
                     })
+                    image_class_ids.append(bbox['category_id'])  # Add the class id of each bounding box
             
-            # Add the image and ensure 'gt_boxes' are included
+            # Add the image and ensure 'gt_boxes' and 'gt_class_ids' are included
             self.add_image(
                 "crack",
                 image_id=image_id,
                 path=image_path,
                 width=width,
                 height=height,
-                gt_boxes=image_bboxes  # Attach bounding boxes under 'gt_boxes'
+                gt_boxes=image_bboxes,  # Attach bounding boxes under 'gt_boxes'
+                gt_class_ids=image_class_ids  # Attach class IDs under 'gt_class_ids'
             )
 
 
