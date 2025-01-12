@@ -1857,12 +1857,12 @@ class MaskRCNN():
             anchors = input_anchors
 
         # RPN Model
-        rpn = build_rpn_model(
-    config.RPN_ANCHOR_STRIDE,
-    len(config.RPN_ANCHOR_RATIOS),  # anchors_per_location
-    depth=256,                      # depth of the feature map
-    anchor_scales=config.RPN_ANCHOR_SCALES,  # add anchor scales
-    anchor_ratios=config.RPN_ANCHOR_RATIOS  # add anchor ratios
+        rpn_model = build_rpn_model(
+    anchor_stride=self.config.RPN_ANCHOR_STRIDE,
+    anchors_per_location=len(self.config.RPN_ANCHOR_RATIOS),
+    depth=self.backbone_shapes[0][-1],  # Depth of the feature map
+    anchor_scales=self.config.RPN_ANCHOR_SCALES,  # Add anchor scales
+    anchor_ratios=self.config.RPN_ANCHOR_RATIOS   # Add anchor ratios
 )
 
         # Loop through pyramid layers
@@ -2127,10 +2127,13 @@ class MaskRCNN():
         input_feature_map = backbone_output[1]  # Use the output of the ResNet backbone
 
         # Build the RPN model
-        anchor_stride = 1
-        anchors_per_location = 9
-        depth = 256
-        rpn_model = build_rpn_model(anchor_stride, anchors_per_location, depth)
+        rpn_model = build_rpn_model(
+    anchor_stride=config.RPN_ANCHOR_STRIDE,
+    anchors_per_location=len(config.RPN_ANCHOR_RATIOS),
+    depth=backbone_shapes[0][-1],  # Feature map depth
+    anchor_scales=config.RPN_ANCHOR_SCALES,
+    anchor_ratios=config.RPN_ANCHOR_RATIOS
+)
 
         # Get the RPN outputs
         rpn_class_logits, rpn_probs, rpn_bbox = rpn_model(input_feature_map)
