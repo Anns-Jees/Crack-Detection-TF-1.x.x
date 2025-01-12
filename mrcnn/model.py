@@ -2124,7 +2124,7 @@ class MaskRCNN():
         union_area = box1_area + box2_area - intersection_area
         iou = intersection_area / union_area
         return iou
-
+    @tf.function
     def match_anchors_to_ground_truth(self, anchor_boxes, gt_boxes, iou_threshold=None):
 
         """
