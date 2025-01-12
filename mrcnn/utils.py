@@ -351,6 +351,8 @@ class Dataset(object):
         """
         return self.image_info[image_id]["path"]
 
+    
+
     def load_image(self, image_id):
         """Load the specified image and return a [H,W,3] Numpy array."""
 
@@ -378,8 +380,15 @@ class Dataset(object):
         # If the image has an alpha channel, remove it for consistency
         if image.shape[-1] == 4:
             image = image[..., :3]
-        image = np.expand_dims(image, axis=0) 
+
+        # Convert the image to float32 for compatibility
+        image = image.astype(np.float32)
+
+        # Expand the dimensions to add batch size
+        image = np.expand_dims(image, axis=0)
+
         return image
+
 
     def load_mask(self, image_id):
         """Load instance masks for the given image.
