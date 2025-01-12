@@ -2142,7 +2142,7 @@ class MaskRCNN():
         if iou_threshold is None:
             iou_threshold = config.RPN_NMS_THRESHOLD
 
-        rpn_match = np.zeros(tf.shape(anchor_boxes)[0], dtype=int)  # Get the first dimension of anchor_boxes
+        rpn_match = tf.zeros(tf.shape(anchor_boxes)[0], dtype=tf.int32)
 
         
         for i, anchor in enumerate(anchor_boxes):
