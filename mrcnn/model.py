@@ -2146,11 +2146,11 @@ class MaskRCNN():
 
         # Build the RPN model
         rpn_model = build_rpn_model(
-    anchor_stride=config.RPN_ANCHOR_STRIDE,
-    anchors_per_location=len(config.RPN_ANCHOR_RATIOS),
+    anchor_stride=self.config.RPN_ANCHOR_STRIDE,
+    anchors_per_location=len(self.config.RPN_ANCHOR_RATIOS),
     depth=256,  # Feature map depth
-    anchor_scales=config.RPN_ANCHOR_SCALES,
-    anchor_ratios=config.RPN_ANCHOR_RATIOS
+    anchor_scales=self.config.RPN_ANCHOR_SCALES,
+    anchor_ratios=self.config.RPN_ANCHOR_RATIOS
 )
 
         # Get the RPN outputs
