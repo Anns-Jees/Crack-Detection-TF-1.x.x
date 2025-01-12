@@ -2056,7 +2056,6 @@ class MaskRCNN():
         return weights_path
 
     def compile(self, learning_rate, momentum):
-
         """Gets the model ready for training. Adds losses, regularization, and
         metrics. Then calls the Keras compile() function.
         """
@@ -2065,70 +2064,64 @@ class MaskRCNN():
             learning_rate=learning_rate, momentum=momentum,
             clipnorm=self.config.GRADIENT_CLIP_NORM)
 
+        # Define the input image shape
+        input_image = tf.keras.Input(shape=(300, 300, 3))  # Adjust according to your image size
+
         # Add Losses
-        # First, clear previously set losses to avoid duplication
         self.keras_model._losses = []
         self.keras_model._per_input_losses = {}
         loss_names = [
             "rpn_class_loss", "rpn_bbox_loss",
             "mrcnn_class_loss", "mrcnn_bbox_loss", "mrcnn_mask_loss"]
         
-        # Retrieve rpn_match and rpn_class_logits from the forward pass (or a relevant layer)
-        # You may need to modify this based on how they are returned in your model
-        # Define anchor_stride, anchors_per_location, and depth
-        anchor_stride = 1  # Typically 1 or 2
-        anchors_per_location = 9  # Number of anchors per pixel location (based on your config)
-        depth = 256  # Depth of the feature map (from your backbone network)
+        # Build the ResNet graph
         backbone_output = resnet_graph(input_image, architecture='resnet50', stage5=True, train_bn=True)
-        # Get the feature map (this should be the output of your backbone network)
-        input_feature_map = some_backbone_model_output  # Replace this with your actual feature map variable
+        input_feature_map = backbone_output  # Use the output of the ResNet backbone
 
         # Build the RPN model
+        anchor_stride = 1
+        anchors_per_location = 9
+        depth = 256
         rpn_model = build_rpn_model(anchor_stride, anchors_per_location, depth)
 
         # Get the RPN outputs
         rpn_class_logits, rpn_probs, rpn_bbox = rpn_model(input_feature_map)
 
-# You can now use `rpn_class_logits` and `rpn_bbox` wherever necessary in place of `rpn_match` and `rpn_class_logits`
- # Placeholder for the actual method
-
+        # For each loss name, calculate the loss (make sure loss functions are correct)
         for name in loss_names:
             if name == "rpn_class_loss":
-                # Use the custom rpn_class_loss_graph function instead of a layer
-                loss = rpn_class_loss_graph(rpn_match, rpn_class_logits)
+                loss = rpn_class_loss_graph(rpn_match, rpn_class_logits)  # Ensure rpn_match is defined or passed
             else:
-                # For other losses, treat as layers
                 layer = self.keras_model.get_layer(name)
                 loss = (
                     tf.reduce_mean(layer.output, keepdims=True)
                     * self.config.LOSS_WEIGHTS.get(name, 1.))
 
-            # Add the loss to the model
             self.keras_model.add_loss(loss)
 
     # Add L2 Regularization
-    # Skip gamma and beta weights of batch normalization layers.
-        reg_losses = [
-            keras.regularizers.l2(self.config.WEIGHT_DECAY)(w) / tf.cast(tf.size(w), tf.float32)
-            for w in self.keras_model.trainable_weights
-            if 'gamma' not in w.name and 'beta' not in w.name]
-        self.keras_model.add_loss(tf.add_n(reg_losses))
+    reg_losses = [
+        keras.regularizers.l2(self.config.WEIGHT_DECAY)(w) / tf.cast(tf.size(w), tf.float32)
+        for w in self.keras_model.trainable_weights
+        if 'gamma' not in w.name and 'beta' not in w.name]
+    self.keras_model.add_loss(tf.add_n(reg_losses))
 
-        # Compile
-        self.keras_model.compile(
-            optimizer=optimizer,
-            loss=[None] * len(self.keras_model.outputs))
+    # Compile
+    self.keras_model.compile(
+        optimizer=optimizer,
+        loss=[None] * len(self.keras_model.outputs))
 
-        # Add metrics for losses
-        for name in loss_names:
-            if name in self.keras_model.metrics_names:
-                continue
-            layer = self.keras_model.get_layer(name)
-            self.keras_model.metrics_names.append(name)
-            loss = (
-                tf.reduce_mean(layer.output, keepdims=True)
-                * self.config.LOSS_WEIGHTS.get(name, 1.))
-            self.keras_model.metrics_tensors.append(loss)
+    # Add metrics for losses
+    for name in loss_names:
+        if name in self.keras_model.metrics_names:
+            continue
+        layer = self.keras_model.get_layer(name)
+        self.keras_model.metrics_names.append(name)
+        loss = (
+            tf.reduce_mean(layer.output, keepdims=True)
+            * self.config.LOSS_WEIGHTS.get(name, 1.))
+        self.keras_model.metrics_tensors.append(loss)
+
 
     def set_trainable(self, layer_regex, keras_model=None, indent=0, verbose=1):
         """Sets model layers as trainable if their names match
