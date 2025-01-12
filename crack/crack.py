@@ -89,6 +89,17 @@ model_inference = modellib.MaskRCNN(mode="inference", config=CrackConfig(), mode
 ############################################################
 class CrackDataset(utils.Dataset):
 
+    def get_gt_boxes(self, image_id):
+        """Return the ground truth bounding boxes for the given image."""
+        # Replace this with how your dataset stores bounding boxes
+        return self.image_info[image_id]['gt_boxes']  # Modify as needed
+
+    def get_gt_class_ids(self, image_id):
+        """Return the ground truth class IDs for the given image."""
+        # Replace this with how your dataset stores class IDs
+        return self.image_info[image_id]['gt_class_ids']  # Modify as needed
+
+
     def load_crack(self, dataset_dir, subset):
         """Load a subset of the crack dataset using bounding boxes and dynamically add classes."""
         
@@ -122,6 +133,8 @@ class CrackDataset(utils.Dataset):
             # Get the bounding boxes for this image
             image_bboxes = []
             for bbox in bboxes:
+
+
                 if bbox['image_id'] == image_id:
                     x, y, w, h = bbox['bbox']
                     image_bboxes.append({
