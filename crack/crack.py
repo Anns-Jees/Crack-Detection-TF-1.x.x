@@ -200,7 +200,7 @@ class CrackDataset(utils.Dataset):
         else:
             super(self.__class__, self).image_reference(image_id)
 
-def train(model):
+def train(model, config):  # Accept config as a parameter
     """Train the model."""
     # Training dataset.
     dataset_train = CrackDataset()
@@ -213,7 +213,6 @@ def train(model):
     dataset_val.prepare()
 
     # Image augmentation
-    # http://imgaug.readthedocs.io/en/latest/source/augmenters.html
     augmentation = iaa.SomeOf((0, 2), [
         iaa.Fliplr(0.5),
         iaa.Flipud(0.5),
@@ -224,30 +223,14 @@ def train(model):
         iaa.GaussianBlur(sigma=(0.0, 5.0))
     ])
     
-    #mean_average_precision_callback = modellib.MeanAveragePrecisionCallback(model, model_inference, dataset_val, 1,
-    #                                                                    verbose=1)    
-    
-    # *** This training schedule is an example. Update to your needs ***
-    # Since we're using a very small dataset, and starting from
-    # COCO trained weights, we don't need to train too long. Also,
-    # no need to train all layers, just the heads should do it.
+    # Training schedule (customize based on your dataset and needs)
     print("Training network heads")
     model.train(dataset_train, dataset_val,
                 learning_rate=config.LEARNING_RATE,
                 epochs=30,
                 augmentation=augmentation,
                 layers='heads')
-                #custom_callbacks=[mean_average_precision_callback])
-    
-  #  model.train(dataset_train, dataset_val, 
-  #              learning_rate=config.LEARNING_RATE / 10, 
-  #              epochs=100, 
-  #              layers='heads')
-  #  model.train(dataset_train, dataset_val, 
-  #              learning_rate=config.LEARNING_RATE,
-  #              epochs=200, 
 
-  #              layers='all')
     
 def color_splash(image, mask):
     """Apply color splash effect.
