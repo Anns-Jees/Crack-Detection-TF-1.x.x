@@ -2099,28 +2099,28 @@ class MaskRCNN():
 
             self.keras_model.add_loss(loss)
 
-    # Add L2 Regularization
-    reg_losses = [
-        keras.regularizers.l2(self.config.WEIGHT_DECAY)(w) / tf.cast(tf.size(w), tf.float32)
-        for w in self.keras_model.trainable_weights
-        if 'gamma' not in w.name and 'beta' not in w.name]
-    self.keras_model.add_loss(tf.add_n(reg_losses))
+        # Add L2 Regularization
+        reg_losses = [
+            keras.regularizers.l2(self.config.WEIGHT_DECAY)(w) / tf.cast(tf.size(w), tf.float32)
+            for w in self.keras_model.trainable_weights
+            if 'gamma' not in w.name and 'beta' not in w.name]
+        self.keras_model.add_loss(tf.add_n(reg_losses))
 
-    # Compile
-    self.keras_model.compile(
-        optimizer=optimizer,
-        loss=[None] * len(self.keras_model.outputs))
+        # Compile
+        self.keras_model.compile(
+            optimizer=optimizer,
+            loss=[None] * len(self.keras_model.outputs))
 
-    # Add metrics for losses
-    for name in loss_names:
-        if name in self.keras_model.metrics_names:
-            continue
-        layer = self.keras_model.get_layer(name)
-        self.keras_model.metrics_names.append(name)
-        loss = (
-            tf.reduce_mean(layer.output, keepdims=True)
-            * self.config.LOSS_WEIGHTS.get(name, 1.))
-        self.keras_model.metrics_tensors.append(loss)
+        # Add metrics for losses
+        for name in loss_names:
+            if name in self.keras_model.metrics_names:
+                continue
+            layer = self.keras_model.get_layer(name)
+            self.keras_model.metrics_names.append(name)
+            loss = (
+                tf.reduce_mean(layer.output, keepdims=True)
+                * self.config.LOSS_WEIGHTS.get(name, 1.))
+            self.keras_model.metrics_tensors.append(loss)
 
 
     def set_trainable(self, layer_regex, keras_model=None, indent=0, verbose=1):
