@@ -838,7 +838,7 @@ def build_rpn_model(anchor_stride, anchors_per_location, depth, anchor_scales, a
                                  name="input_rpn_feature_map")
 
     # Force reduction of the feature map depth to 128 channels
-    x = Conv2D(128, (1, 1), strides=(1, 1), padding="same", name="rpn_channel_reduction")(input_feature_map)
+    x = Conv2D(256, (1, 1), strides=(1, 1), padding="same", name="rpn_channel_reduction")(input_feature_map)
 
     # Generate anchors based on the feature map size and the scales/ratios
     feature_map_shape = x.shape[1:3]  # (height, width)
