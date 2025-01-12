@@ -2105,8 +2105,8 @@ class MaskRCNN():
         return weights_path
 
 
-    def compute_iou(box1, box2):
-        
+    def compute_iou(self, box1, box2):
+
         """
         Computes the Intersection over Union (IoU) between two boxes.
         Each box is represented as [y1, x1, y2, x2] (top-left, bottom-right).
@@ -2124,7 +2124,7 @@ class MaskRCNN():
         iou = intersection_area / union_area
         return iou
 
-    def match_anchors_to_ground_truth(anchor_boxes, gt_boxes, iou_threshold=0.5):
+    def match_anchors_to_ground_truth(self, anchor_boxes, gt_boxes, iou_threshold=0.5):
         """
         Matches anchor boxes to ground truth boxes based on IoU.
         
@@ -2155,7 +2155,7 @@ class MaskRCNN():
         
         return rpn_match
 
-    def compute_bbox_deltas(anchor, gt_box):
+    def compute_bbox_deltas(self, anchor, gt_box):
         """
         Computes the bounding box deltas (dx, dy, dw, dh) for the anchor box.
         
@@ -2187,7 +2187,7 @@ class MaskRCNN():
         return deltas
 
 
-    def rpn_target_layers(anchor_boxes, gt_boxes, gt_class_ids, config):
+    def rpn_target_layers(self, anchor_boxes, gt_boxes, gt_class_ids, config):
         """
         Matches anchors to ground truth boxes and computes the bounding box deltas.
         
