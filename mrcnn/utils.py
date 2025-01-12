@@ -378,7 +378,7 @@ class Dataset(object):
         # If the image has an alpha channel, remove it for consistency
         if image.shape[-1] == 4:
             image = image[..., :3]
-
+        image = np.expand_dims(image, axis=0) 
         return image
 
     def load_mask(self, image_id):
