@@ -394,6 +394,7 @@ def overlaps_graph(boxes1, boxes2):
                             [1, 1, tf.shape(boxes2)[0]]), [-1, 4])
     b2 = tf.tile(boxes2, [tf.shape(boxes1)[0], 1])
     # 2. Compute intersections
+
     b1_y1, b1_x1, b1_y2, b1_x2 = tf.split(b1, 4, axis=1)
     b2_y1, b2_x1, b2_y2, b2_x2 = tf.split(b2, 4, axis=1)
     y1 = tf.maximum(b1_y1, b2_y1)
@@ -1277,7 +1278,8 @@ def build_detection_targets(rpn_rois, gt_class_ids, gt_boxes, gt_masks, config):
     rpn_roi_gt_class_ids = gt_class_ids[rpn_roi_iou_argmax]
 
     # Positive ROIs are those with >= 0.5 IoU with a GT box.
-    fg_ids = np.where(rpn_roi_iou_max > 0.5)[0]
+    fg_ids = np.where(rpn_roi_iou_max > config.RPN_NMS_THRESHOLD)[0]
+
 
     # Negative ROIs are those with max IoU 0.1-0.5 (hard example mining)
     # TODO: To hard example mine or not to hard example mine, that's the question
@@ -1430,8 +1432,7 @@ def build_rpn_targets(image_shape, anchors, gt_class_ids, gt_boxes, config):
     gt_iou_argmax = np.argwhere(overlaps == np.max(overlaps, axis=0))[:,0]
     rpn_match[gt_iou_argmax] = 1
     # 3. Set anchors with high overlap as positive.
-    rpn_match[anchor_iou_max >= 0.7] = 1
-
+    rpn_match[anchor_iou_max >= config.RPN_NMS_THRESHOLD] = 1
     # Subsample to balance positive and negative anchors
     # Don't let positives be more than half the anchors
     ids = np.where(rpn_match == 1)[0]
@@ -2124,18 +2125,23 @@ class MaskRCNN():
         iou = intersection_area / union_area
         return iou
 
-    def match_anchors_to_ground_truth(self, anchor_boxes, gt_boxes, iou_threshold=0.5):
+    def match_anchors_to_ground_truth(self, anchor_boxes, gt_boxes, iou_threshold=None):
+
         """
         Matches anchor boxes to ground truth boxes based on IoU.
         
         Args:
             anchor_boxes: Predefined anchor boxes.
             gt_boxes: Ground truth bounding boxes.
-            iou_threshold: IoU threshold for positive match.
+            iou_threshold: IoU threshold for positive match. If None, uses RPN_NMS_THRESHOLD from config.
             
         Returns:
             rpn_match: The match labels for each anchor.
         """
+        # Use RPN_NMS_THRESHOLD from the config if no threshold is provided
+        if iou_threshold is None:
+            iou_threshold = config.RPN_NMS_THRESHOLD
+
         rpn_match = np.zeros(len(anchor_boxes), dtype=int)  # Initialize all anchors as background (0)
         
         for i, anchor in enumerate(anchor_boxes):
@@ -2154,6 +2160,7 @@ class MaskRCNN():
                 rpn_match[i] = 0  # No match (negative background anchor)
         
         return rpn_match
+
 
     def compute_bbox_deltas(self, anchor, gt_box):
         """
