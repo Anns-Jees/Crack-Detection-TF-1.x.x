@@ -1857,10 +1857,14 @@ class MaskRCNN():
             anchors = input_anchors
 
         # RPN Model
-        rpn = build_rpn_model(config.RPN_ANCHOR_STRIDE,
-                      config.RPN_ANCHOR_SCALES,    # anchor_scales should be passed
-                      config.RPN_ANCHOR_RATIOS,    # anchor_ratios should be passed
-                      config.TOP_DOWN_PYRAMID_SIZE)
+        rpn = build_rpn_model(
+    config.RPN_ANCHOR_STRIDE,
+    len(config.RPN_ANCHOR_RATIOS),  # anchors_per_location
+    depth=256,                      # depth of the feature map
+    anchor_scales=config.RPN_ANCHOR_SCALES,  # add anchor scales
+    anchor_ratios=config.RPN_ANCHOR_RATIOS  # add anchor ratios
+)
+
         # Loop through pyramid layers
         layer_outputs = []  # list of lists
         for p in rpn_feature_maps:
