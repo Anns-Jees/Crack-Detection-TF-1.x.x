@@ -744,8 +744,6 @@ class DetectionLayer(KL.Layer):
 #  Anchor Generation for RPN
 ############################################################
 
-import tensorflow as tf
-
 def get_anchors(feature_map_shape, anchor_scales, anchor_ratios):
     """
     Generate anchor boxes for RPN.
@@ -763,21 +761,21 @@ def get_anchors(feature_map_shape, anchor_scales, anchor_ratios):
 
     for scale in anchor_scales:
         for ratio in anchor_ratios:
-            w = scale * tf.sqrt(ratio)  # Width of the anchor
-            h = scale / tf.sqrt(ratio)  # Height of the anchor
+            w = scale * tf.sqrt(tf.cast(ratio, tf.float32))  # Width of the anchor
+            h = scale / tf.sqrt(tf.cast(ratio, tf.float32))  # Height of the anchor
             anchors.append([0, 0, w, h])  # [y_min, x_min, y_max, x_max]
 
     anchors = tf.convert_to_tensor(anchors, dtype=tf.float32)
-    anchors = tf.Tensor(anchors, dtype=tf.float32)
 
     anchors = tf.stack([ 
         -anchors[:, 2] / 2,  # y_min = -height / 2
         -anchors[:, 3] / 2,  # x_min = -width / 2
          anchors[:, 2] / 2,   # y_max = height / 2
          anchors[:, 3] / 2    # x_max = width / 2
-    ] ,axis=-1)
+    ], axis=-1)
   
     return anchors
+
 
 ############################################################
 #  Region Proposal Network (RPN)
