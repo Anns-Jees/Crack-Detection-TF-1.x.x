@@ -1,4 +1,4 @@
-
+tf.config.run_functions_eagerly(True)
 import datetime
 import logging
 import math
