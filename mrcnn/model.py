@@ -1956,7 +1956,8 @@ class MaskRCNN():
             output_rois = KL.Lambda(lambda x: x * 1, name="output_rois")(rois)
 
             # Losses
-            rpn_class_loss = KL.Lambda(lambda x: rpn_class_loss_graph(*x), output_shape=(1,), ([input_rpn_match, rpn_class_logits]))
+            rpn_class_loss = KL.Lambda(lambda x: rpn_class_loss_graph(*x), ([input_rpn_match, rpn_class_logits]), output_shape=(1,))
+
 
             rpn_bbox_loss = KL.Lambda(lambda x: rpn_bbox_loss_graph(config, *x), name="rpn_bbox_loss")(
                 [input_rpn_bbox, input_rpn_match, rpn_bbox])
