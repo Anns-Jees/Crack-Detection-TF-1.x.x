@@ -41,21 +41,27 @@ class BatchNorm(KL.BatchNormalization):
 
 def compute_backbone_shapes(config, image_shape):
     """Computes the width and height of each stage of the backbone network."""
+    
+    # Check if a custom backbone shape computation is provided
     if callable(config.BACKBONE):
         return config.COMPUTE_BACKBONE_SHAPE(image_shape)
-    
+
     assert config.BACKBONE in ["resnet50", "resnet101"]
 
-    # If image_shape is a TensorFlow tensor, use TensorFlow operations
-    if isinstance(image_shape, tf.Tensor):
-        return tf.convert_to_tensor([[tf.math.ceil(image_shape[0] / stride), 
-                                      tf.math.ceil(image_shape[1] / stride)]
+    # TensorFlow operations for image_shape (TensorFlow tensors or NumPy arrays)
+    def compute_shape_per_stride(image_shape, stride):
+        height = tf.math.ceil(image_shape[0] / stride)
+        width = tf.math.ceil(image_shape[1] / stride)
+        return [tf.cast(height, tf.int32), tf.cast(width, tf.int32)]
+    
+    # If image_shape is a TensorFlow tensor or NumPy array, use TensorFlow ops
+    if isinstance(image_shape, (tf.Tensor, np.ndarray)):
+        return tf.convert_to_tensor([compute_shape_per_stride(image_shape, stride)
                                      for stride in config.BACKBONE_STRIDES], dtype=tf.int32)
+    
+    # Raise an error if the input type is not recognized
+    raise ValueError("image_shape must be a TensorFlow tensor or NumPy array")
 
-    # If image_shape is a NumPy array, use regular math functions
-    return np.array([[int(math.ceil(image_shape[0] / stride)), 
-                      int(math.ceil(image_shape[1] / stride))]
-                     for stride in config.BACKBONE_STRIDES])
 
 
 # Identity Block
@@ -2128,8 +2134,6 @@ class MaskRCNN():
 
 
 
-
-
     def compute_bbox_deltas(self, anchor, gt_box):
         """
         Computes the bounding box deltas (dx, dy, dw, dh) for the anchor box.
@@ -2139,7 +2143,7 @@ class MaskRCNN():
             gt_box: The ground truth box, represented as [y1, x1, y2, x2].
             
         Returns:
-            deltas: A list [dx, dy, dw, dh] representing the deltas.
+            deltas: A tensor [dx, dy, dw, dh] representing the deltas.
         """
         # Compute center coordinates (cx, cy) and width/height for both anchor and ground truth box
         anchor_cy = (anchor[0] + anchor[2]) / 2
@@ -2152,13 +2156,14 @@ class MaskRCNN():
         gt_h = gt_box[2] - gt_box[0]
         gt_w = gt_box[3] - gt_box[1]
         
-        # Compute deltas (dx, dy, dw, dh)
+        # Compute deltas (dx, dy, dw, dh) using TensorFlow functions
         dx = (gt_cx - anchor_cx) / anchor_w
         dy = (gt_cy - anchor_cy) / anchor_h
-        dw = np.log(gt_w / anchor_w)
-        dh = np.log(gt_h / anchor_h)
+        dw = tf.math.log(gt_w / anchor_w)  # Replace np.log with tf.math.log
+        dh = tf.math.log(gt_h / anchor_h)
 
-        deltas = [dx, dy, dw, dh]
+        # Return deltas as a TensorFlow tensor
+        deltas = tf.stack([dx, dy, dw, dh])
         return deltas
 
 
