@@ -1709,51 +1709,6 @@ def data_generator(dataset, config, shuffle=True, augment=False, augmentation=No
             if error_count > 5:
                 raise
 
-#####Class##############
-class AnchorMatchingLayer(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
-        super(AnchorMatchingLayer, self).__init__(**kwargs)
-        self.config = config
-
-    def call(self, inputs):
-        anchor_boxes, gt_boxes = inputs
-        return self.match_anchors_to_ground_truth(anchor_boxes, gt_boxes, self.config.RPN_NMS_THRESHOLD)
-
-    def match_anchors_to_ground_truth(self, anchor_boxes, gt_boxes, iou_threshold=None):
-        """
-        Matches anchor boxes to ground truth boxes based on IoU.
-
-        Args:
-            anchor_boxes: Predefined anchor boxes.
-            gt_boxes: Ground truth bounding boxes.
-            iou_threshold: IoU threshold for positive match.
-
-        Returns:
-            rpn_match: The match labels for each anchor.
-        """
-        if iou_threshold is None:
-            iou_threshold = self.config.RPN_NMS_THRESHOLD
-
-        # Convert anchor_boxes to TensorFlow tensor explicitly (to avoid KerasTensor issues)
-        anchor_boxes = tf.convert_to_tensor(anchor_boxes)
-
-        # Initialize rpn_match with zeros (no matches)
-        rpn_match = tf.zeros([tf.shape(anchor_boxes)[0]], dtype=tf.int32)
-
-        # Compute IoU between all anchor boxes and ground truth boxes
-        iou_matrix = self.compute_iou_batch(anchor_boxes, gt_boxes)
-
-        # Find the best matching ground truth for each anchor (the one with highest IoU)
-        max_iou_values = tf.reduce_max(iou_matrix, axis=1)  # Max IoU per anchor
-        best_gt_indices = tf.argmax(iou_matrix, axis=1)  # Index of best ground truth match for each anchor
-
-        # Apply matching logic based on IoU threshold
-        positive_matches = tf.greater(max_iou_values, iou_threshold)  # Positive matches based on IoU threshold
-        rpn_match = tf.where(positive_matches, tf.ones_like(rpn_match), rpn_match)  # Set positive matches to 1
-
-        return rpn_match
-
-
 ############################################################
 #  MaskRCNN Class
 ############################################################
@@ -1956,11 +1911,7 @@ class MaskRCNN():
             output_rois = KL.Lambda(lambda x: x * 1, name="output_rois")(rois)
 
             # Losses
-            rpn_class_loss = KL.Lambda(lambda x: rpn_class_loss_graph(*x), 
-                           arguments=[input_rpn_match, rpn_class_logits], 
-                           output_shape=(1,))
-
-
+            rpn_class_loss = KL.Lambda(lambda x: rpn_class_loss_graph(*x), output_shape=(1,), ([input_rpn_match, rpn_class_logits]))
 
             rpn_bbox_loss = KL.Lambda(lambda x: rpn_bbox_loss_graph(config, *x), name="rpn_bbox_loss")(
                 [input_rpn_bbox, input_rpn_match, rpn_bbox])
@@ -2143,6 +2094,41 @@ class MaskRCNN():
             iou_matrix = iou_matrix.write(i, ious)
         
         return iou_matrix.stack()
+
+    @tf.function
+    def match_anchors_to_ground_truth(self, anchor_boxes, gt_boxes, iou_threshold=None):
+        """
+        Matches anchor boxes to ground truth boxes based on IoU.
+
+        Args:
+            anchor_boxes: Predefined anchor boxes.
+            gt_boxes: Ground truth bounding boxes.
+            iou_threshold: IoU threshold for positive match. If None, uses RPN_NMS_THRESHOLD from config.
+
+        Returns:
+            rpn_match: The match labels for each anchor.
+        """
+        if iou_threshold is None:
+            iou_threshold = config.RPN_NMS_THRESHOLD
+
+        # Convert anchor_boxes to a TensorFlow tensor explicitly
+        anchor_boxes = tf.convert_to_tensor(anchor_boxes)
+
+        # Initialize rpn_match with zeros (no matches)
+        rpn_match = tf.zeros([tf.shape(anchor_boxes)[0]], dtype=tf.int32)
+
+        # Compute IoU between all anchor boxes and ground truth boxes
+        iou_matrix = self.compute_iou_batch(anchor_boxes, gt_boxes)
+
+        # Find the best matching ground truth for each anchor (the one with highest IoU)
+        max_iou_values = tf.reduce_max(iou_matrix, axis=1)  # Max IoU per anchor
+        best_gt_indices = tf.argmax(iou_matrix, axis=1)  # Index of best ground truth match for each anchor
+
+        # Apply matching logic based on IoU threshold
+        positive_matches = tf.greater(max_iou_values, iou_threshold)  # Positive matches based on IoU threshold
+        rpn_match = tf.where(positive_matches, tf.ones_like(rpn_match), rpn_match)  # Set positive matches to 1
+
+        return rpn_match
 
 
 
