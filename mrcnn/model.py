@@ -2117,6 +2117,9 @@ class MaskRCNN():
         if iou_threshold is None:
             iou_threshold = config.RPN_NMS_THRESHOLD
 
+        # Convert anchor_boxes to a TensorFlow tensor explicitly
+        anchor_boxes = tf.convert_to_tensor(anchor_boxes)
+
         # Initialize rpn_match with zeros (no matches)
         rpn_match = tf.zeros([tf.shape(anchor_boxes)[0]], dtype=tf.int32)
 
