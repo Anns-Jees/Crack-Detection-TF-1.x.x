@@ -1708,12 +1708,21 @@ def data_generator(dataset, config, shuffle=True, augment=False, augmentation=No
             error_count += 1
             if error_count > 5:
                 raise
-
+##Custom Layer##
+class CreateRPNMatch(Layer):
+    def call(self, inputs):
+        anchor_boxes = inputs  # Assuming anchor_boxes is passed to this layer
+        return tf.zeros([tf.shape(anchor_boxes)[0]], dtype=tf.int32)
 ############################################################
 #  MaskRCNN Class
 ############################################################
 
-class MaskRCNN():
+class MaskRCNN(tf.keras.Model):
+    def __init__(self):
+        super().__init__()
+        # Instantiate CreateRPNMatch as a class member
+        self.create_rpn_match_layer = CreateRPNMatch()
+
     """Encapsulates the Mask RCNN model functionality."""
 
     def __init__(self, mode, config, model_dir):
@@ -2118,7 +2127,7 @@ class MaskRCNN():
             iou_threshold = config.RPN_NMS_THRESHOLD
 
         # Initialize rpn_match with zeros (no matches)
-        rpn_match = tf.zeros([tf.shape(anchor_boxes)[0]], dtype=tf.int32)
+        rpn_match = self.create_rpn_match_layer(anchor_boxes)
 
         # Compute IoU between all anchor boxes and ground truth boxes
         iou_matrix = self.compute_iou_batch(anchor_boxes, gt_boxes)
