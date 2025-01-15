@@ -1736,6 +1736,7 @@ class MaskRCNN(tf.keras.Model):
         self.mode = mode
         self.config = config
         self.model_dir = model_dir
+        self._parent_path = None
         self.set_log_dir()
         self.backbone_shapes = self.compute_backbone_shapes(config, config.IMAGE_SHAPE)
         self.keras_model = self.build(mode=mode, config=config)
