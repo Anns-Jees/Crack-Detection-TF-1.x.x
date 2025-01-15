@@ -9,6 +9,7 @@ import random
 import re
 from collections import OrderedDict
 import numpy as np
+from tensorflow.keras.layers import Layer
 
 import tensorflow.keras as keras
 from tensorflow.keras import backend as K
