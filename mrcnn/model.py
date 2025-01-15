@@ -1718,6 +1718,10 @@ class CreateRPNMatch(Layer):
 #  MaskRCNN Class
 ############################################################
 MODEL_DIR = '/root/Crack-Detection-TF-1.x.x/logs'
+
+# Initialize MaskRCNN model
+mask_rcnn_model = modellib.MaskRCNN(mode="inference", config=CrackConfig(), model_dir=MODEL_DIR)
+
 class MaskRCNN(tf.keras.Model):
     def __init__(self):
         super().__init__()
@@ -1741,7 +1745,7 @@ class MaskRCNN(tf.keras.Model):
         self._parent_path = None
         self.set_log_dir()
         self.backbone_shapes = self.compute_backbone_shapes(config, config.IMAGE_SHAPE)
-        self.keras_model = modellib.MaskRCNN(mode="inference", config=config, model_dir=MODEL_DIR).keras_model
+        self.keras_model = mask_rcnn_model.keras_model
 
 
     def compute_backbone_shapes(self, config, image_shape):
