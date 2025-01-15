@@ -1717,7 +1717,7 @@ class CreateRPNMatch(Layer):
 ############################################################
 #  MaskRCNN Class
 ############################################################
-
+MODEL_DIR = '/root/Crack-Detection-TF-1.x.x/logs'
 class MaskRCNN(tf.keras.Model):
     def __init__(self):
         super().__init__()
