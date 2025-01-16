@@ -18,7 +18,7 @@ from tensorflow.keras import models as KM
 from tensorflow.keras.callbacks import ModelCheckpoint  # Correct import
 from tensorflow.keras.layers import Conv2D
 from tensorflow.keras.callbacks import Callback
-from mrcnn.model import load_model
+#from mrcnn.model import load_model
 
 def load_model():
     from mrcnn import model as modellib
@@ -2030,7 +2030,7 @@ class MaskRCNN(tf.keras.Model):
         exclude: list of layer names to exclude
         """
         import h5py
-        ##from tensorflow.keras.models import load_model
+        from tensorflow.keras.models import load_model
 
         if exclude:
             by_name = True
