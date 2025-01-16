@@ -27,7 +27,7 @@ Usage: import the module (see Jupyter notebooks for examples), or run from
     # Apply color splash to video using the last weights you trained
     python3 crack.py splash --weights=last --video=<URL or path to file>
 """
-import cv2
+
 import os
 import sys
 import json
@@ -68,7 +68,7 @@ class CrackConfig(Config):
     IMAGES_PER_GPU = 2
 
     # Number of classes (including background)
-    NUM_CLASSES = 27  # Background + crack
+    NUM_CLASSES = 1 + 1  # Background + crack
 
     # Number of training steps per epoch
     STEPS_PER_EPOCH = 100
@@ -87,109 +87,93 @@ model_inference = modellib.MaskRCNN(mode="inference", config=CrackConfig(), mode
 ############################################################
 #  Dataset
 ############################################################
+
 class CrackDataset(utils.Dataset):
 
-    def get_gt_boxes(self, image_id):
-        """Return the ground truth bounding boxes for the given image."""
-        # Replace this with how your dataset stores bounding boxes
-        return self.image_info[image_id]['gt_boxes']  # Modify as needed
-
-    def get_gt_class_ids(self, image_id):
-        """Return the ground truth class IDs for the given image."""
-        # Replace this with how your dataset stores class IDs
-        return self.image_info[image_id]['gt_class_ids']  # Modify as needed
-
-
     def load_crack(self, dataset_dir, subset):
-        """Load a subset of the crack dataset using bounding boxes and dynamically add classes."""
-        
-        # Load annotations (we expect a list of annotations in COCO format)
-        annotations = json.load(open(os.path.join(dataset_dir, "via_region_data.json")))
-
-        # Dynamically add classes based on the 'categories' field in the annotations
-        categories = annotations['categories']  # Get the list of categories
-        for category in categories:
-            class_id = category['id']
-            class_name = category['name']
-            self.add_class("crack", class_id, class_name)
+        """Load a subset of the crack dataset.
+        dataset_dir: Root directory of the dataset.
+        subset: Subset to load: train or val
+        """
+        # Add classes. We have only one class to add.
+        self.add_class("crack", 1, "crack")
 
         # Train or validation dataset?
         assert subset in ["train", "val"]
-        
-        # Add the subset directory ('train' or 'val') without repeating 'train/train'
-        dataset_dir = os.path.join(dataset_dir, subset)  # This should be fine if dataset_dir is '/root/Crack-Detection-TF-1.x.x/dataset/dataset'
-        
-        # Load images and bounding boxes
-        images = annotations['images']  # Images metadata
-        bboxes = annotations['annotations']  # Bounding boxes
-        
-        # Add images and corresponding bounding boxes
-        for image_info in images:
-            image_id = image_info['id']
-            image_path = os.path.join(dataset_dir, image_info['file_name'])
-            height = image_info['height']
-            width = image_info['width']
-            
-            # Get the bounding boxes for this image
-            image_bboxes = []
-            image_class_ids = []  # List to store class IDs for each bounding box
-            
-            for bbox in bboxes:
-                if bbox['image_id'] == image_id:
-                    x, y, w, h = bbox['bbox']
-                    image_bboxes.append({
-                        'class_id': bbox['category_id'],
-                        'bbox': [x, y, w, h]
-                    })
-                    image_class_ids.append(bbox['category_id'])  # Add the class id of each bounding box
-            
-            # Add the image and ensure 'gt_boxes' and 'gt_class_ids' are included
+        dataset_dir = os.path.join(dataset_dir, subset)
+
+        # Load annotations
+        # VGG Image Annotator (up to version 1.6) saves each image in the form:
+        # { 'filename': '28503151_5b5b7ec140_b.jpg',
+        #   'regions': {
+        #       '0': {
+        #           'region_attributes': {},
+        #           'shape_attributes': {
+        #               'all_points_x': [...],
+        #               'all_points_y': [...],
+        #               'name': 'polygon'}},
+        #       ... more regions ...
+        #   },
+        #   'size': 100202
+        # }
+        # We mostly care about the x and y coordinates of each region
+        # Note: In VIA 2.0, regions was changed from a dict to a list.
+        annotations = json.load(open(os.path.join(dataset_dir, "via_region_data.json")))
+        annotations = list(annotations.values())  # don't need the dict keys
+
+        # The VIA tool saves images in the JSON even if they don't have any
+        # annotations. Skip unannotated images.
+        annotations = [a for a in annotations if a['regions']]
+
+        # Add images
+        for a in annotations:
+            # Get the x, y coordinaets of points of the polygons that make up
+            # the outline of each object instance. These are stores in the
+            # shape_attributes (see json format above)
+            # The if condition is needed to support VIA versions 1.x and 2.x.
+            if type(a['regions']) is dict:
+                polygons = [r['shape_attributes'] for r in a['regions'].values()]
+            else:
+                polygons = [r['shape_attributes'] for r in a['regions']] 
+
+            # load_mask() needs the image size to convert polygons to masks.
+            # Unfortunately, VIA doesn't include it in JSON, so we must read
+            # the image. This is only managable since the dataset is tiny.
+            image_path = os.path.join(dataset_dir, a['filename'])
+            image = skimage.io.imread(image_path)
+            height, width = image.shape[:2]
+
             self.add_image(
                 "crack",
-                image_id=image_id,
+                image_id=a['filename'],  # use file name as a unique image id
                 path=image_path,
-                width=width,
-                height=height,
-                gt_boxes=image_bboxes,  # Attach bounding boxes under 'gt_boxes'
-                gt_class_ids=image_class_ids  # Attach class IDs under 'gt_class_ids'
-            )
+                width=width, height=height,
+                polygons=polygons)
 
-
-    '''
-    def load_image(self, image_id):
-        """Load and return the image."""
-        # Get image path
-        image_info = self.image_info[image_id]
-        image_path = image_info["path"]
-        
-        # Load the image using OpenCV
-        image = cv2.imread(image_path)
-        
-        # Convert the image to RGB (if needed)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        
-        return image'''
-    
     def load_mask(self, image_id):
         """Generate instance masks for an image.
-        Returns:
+       Returns:
         masks: A bool array of shape [height, width, instance count] with
             one mask per instance.
         class_ids: a 1D array of class IDs of the instance masks.
         """
-        # Get the image's bounding boxes
+        # If not a crack dataset image, delegate to parent class.
         image_info = self.image_info[image_id]
-        bboxes = image_info['bboxes']
-        
-        # Initialize the mask
-        mask = np.zeros([image_info["height"], image_info["width"], len(bboxes)], dtype=np.uint8)
-        
-        # Loop through each bounding box and create a rectangular mask
-        for i, bbox in enumerate(bboxes):
-            y1, x1, y2, x2 = bbox['bbox']  # Assuming the format is [ymin, xmin, ymax, xmax]
-            mask[y1:y2, x1:x2, i] = 1  # Set pixels inside the bounding box to 1
-        
-        # Return mask and class IDs
+        if image_info["source"] != "crack":
+            return super(self.__class__, self).load_mask(image_id)
+
+        # Convert polygons to a bitmap mask of shape
+        # [height, width, instance_count]
+        info = self.image_info[image_id]
+        mask = np.zeros([info["height"], info["width"], len(info["polygons"])],
+                        dtype=np.uint8)
+        for i, p in enumerate(info["polygons"]):
+            # Get indexes of pixels inside the polygon and set them to 1
+            rr, cc = skimage.draw.polygon(p['all_points_y'], p['all_points_x'])
+            mask[rr, cc, i] = 1
+
+        # Return mask, and array of class IDs of each instance. Since we have
+        # one class ID only, we return an array of 1s
         return mask.astype(np.bool), np.ones([mask.shape[-1]], dtype=np.int32)
 
     def image_reference(self, image_id):
@@ -200,7 +184,8 @@ class CrackDataset(utils.Dataset):
         else:
             super(self.__class__, self).image_reference(image_id)
 
-def train(model, config):  # Accept config as a parameter
+
+def train(model):
     """Train the model."""
     # Training dataset.
     dataset_train = CrackDataset()
@@ -213,6 +198,7 @@ def train(model, config):  # Accept config as a parameter
     dataset_val.prepare()
 
     # Image augmentation
+    # http://imgaug.readthedocs.io/en/latest/source/augmenters.html
     augmentation = iaa.SomeOf((0, 2), [
         iaa.Fliplr(0.5),
         iaa.Flipud(0.5),
@@ -223,14 +209,29 @@ def train(model, config):  # Accept config as a parameter
         iaa.GaussianBlur(sigma=(0.0, 5.0))
     ])
     
-    # Training schedule (customize based on your dataset and needs)
+    #mean_average_precision_callback = modellib.MeanAveragePrecisionCallback(model, model_inference, dataset_val, 1,
+    #                                                                    verbose=1)    
+    
+    # *** This training schedule is an example. Update to your needs ***
+    # Since we're using a very small dataset, and starting from
+    # COCO trained weights, we don't need to train too long. Also,
+    # no need to train all layers, just the heads should do it.
     print("Training network heads")
     model.train(dataset_train, dataset_val,
                 learning_rate=config.LEARNING_RATE,
                 epochs=30,
                 augmentation=augmentation,
                 layers='heads')
-
+                #custom_callbacks=[mean_average_precision_callback])
+    
+  #  model.train(dataset_train, dataset_val, 
+  #              learning_rate=config.LEARNING_RATE / 10, 
+  #              epochs=100, 
+  #              layers='heads')
+  #  model.train(dataset_train, dataset_val, 
+  #              learning_rate=config.LEARNING_RATE,
+  #              epochs=200, 
+  #              layers='all')
     
 def color_splash(image, mask):
     """Apply color splash effect.
@@ -386,7 +387,7 @@ if __name__ == '__main__':
     if args.weights.lower() == "coco":
         # Exclude the last layers because they require a matching
         # number of classes
-        model.load_weights(weights_path, by_name=True, exclude=[ 
+        model.load_weights(weights_path, by_name=True, exclude=[
             "mrcnn_class_logits", "mrcnn_bbox_fc",
             "mrcnn_bbox", "mrcnn_mask"])
     else:
@@ -394,7 +395,7 @@ if __name__ == '__main__':
 
     # Train or evaluate
     if args.command == "train":
-        train(model, config)  # Pass config to train() function
+        train(model)
     elif args.command == "splash":
         detect_and_color_splash(model, image_path=args.image,
                                 video_path=args.video)
