@@ -2801,7 +2801,7 @@ class MaskRCNN(tf.keras.Model):
 MODEL_DIR = '/root/Crack-Detection-TF-1.x.x/logs'
 
 # Initialize MaskRCNN model
-mask_rcnn_model = modellib.MaskRCNN(mode="inference", config=CrackConfig(), model_dir=MODEL_DIR)
+mask_rcnn_model = modellib.MaskRCNN(mode="inference", config=Config(), model_dir=MODEL_DIR)
 ############################################################
 #  Data Formatting
 ############################################################
