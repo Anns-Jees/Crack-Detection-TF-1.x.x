@@ -1721,10 +1721,7 @@ class CreateRPNMatch(Layer):
 ############################################################
 #  MaskRCNN Class
 ############################################################
-MODEL_DIR = '/root/Crack-Detection-TF-1.x.x/logs'
 
-# Initialize MaskRCNN model
-mask_rcnn_model = modellib.MaskRCNN(mode="inference", config=CrackConfig(), model_dir=MODEL_DIR)
 
 class MaskRCNN(tf.keras.Model):
     def __init__(self):
@@ -2799,6 +2796,10 @@ class MaskRCNN(tf.keras.Model):
             log(k, v)
         return outputs_np
 
+MODEL_DIR = '/root/Crack-Detection-TF-1.x.x/logs'
+
+# Initialize MaskRCNN model
+mask_rcnn_model = modellib.MaskRCNN(mode="inference", config=CrackConfig(), model_dir=MODEL_DIR)
 ############################################################
 #  Data Formatting
 ############################################################
