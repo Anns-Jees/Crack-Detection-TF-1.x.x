@@ -20,6 +20,8 @@ from tensorflow.keras.layers import Conv2D
 from tensorflow.keras.callbacks import Callback
 #from mrcnn.model import load_model
 from mrcnn import model as modellib
+from mrcnn.config import Config
+
 
 def load_model():
     #from mrcnn import model as modellib
