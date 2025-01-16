@@ -19,9 +19,11 @@ from tensorflow.keras.callbacks import ModelCheckpoint  # Correct import
 from tensorflow.keras.layers import Conv2D
 from tensorflow.keras.callbacks import Callback
 #from mrcnn.model import load_model
+from mrcnn import model as modellib
 
 def load_model():
-    from mrcnn import model as modellib
+    #from mrcnn import model as modellib
+    pass
     # Other logic for loading model
 
 # Utility Functions
