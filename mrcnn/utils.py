@@ -351,44 +351,18 @@ class Dataset(object):
         """
         return self.image_info[image_id]["path"]
 
-    
-
     def load_image(self, image_id):
-        """Load the specified image and return a [H,W,3] Numpy array."""
-
-        # Get the path from the image_info
-        path = self.image_info[image_id]['path']
-
-        # Print the path for debugging
-        print(f"Loading image from path: {path}")  # Debugging line
-
-        # Check if the path contains 'train/train' and replace it with 'train'
-        if "train/train" in path:
-            path = path.replace("train/train", "train")  # Fix the path to point to the correct folder
-
-        # Now attempt to load the image from the corrected path
-        try:
-            image = skimage.io.imread(path)
-        except FileNotFoundError:
-            print(f"File not found: {path}")
-            raise
-
-        # If grayscale, convert to RGB for consistency
+        """Load the specified image and return a [H,W,3] Numpy array.
+        """
+        # Load image
+        image = skimage.io.imread(self.image_info[image_id]['path'])
+        # If grayscale. Convert to RGB for consistency.
         if image.ndim != 3:
             image = skimage.color.gray2rgb(image)
-
-        # If the image has an alpha channel, remove it for consistency
+        # If has an alpha channel, remove it for consistency
         if image.shape[-1] == 4:
             image = image[..., :3]
-
-        # Convert the image to float32 for compatibility
-        image = image.astype(np.float32)
-
-        # Expand the dimensions to add batch size
-        image = np.expand_dims(image, axis=0)
-
         return image
-
 
     def load_mask(self, image_id):
         """Load instance masks for the given image.
