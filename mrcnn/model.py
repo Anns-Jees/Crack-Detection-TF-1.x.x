@@ -17,14 +17,13 @@ import re
 from collections import OrderedDict
 from distutils.version import LooseVersion
 
-import keras
-import keras.backend as K
-import keras.engine as KE
-import keras.layers as KL
-import keras.models as KM
-import numpy as np
 import tensorflow as tf
-from keras.callbacks import Callback
+from tensorflow.keras import backend as K
+from tensorflow.keras import layers as KL
+from tensorflow.keras import models as KM
+from tensorflow.keras.callbacks import Callback
+import numpy as np
+
 
 from mrcnn import utils
 from mrcnn.utils import Dataset
@@ -2359,7 +2358,7 @@ class MaskRCNN():
         # Work-around for Windows: Keras fails on Windows when using
         # multiprocessing workers. See discussion here:
         # https://github.com/matterport/Mask_RCNN/issues/13#issuecomment-353124009
-        if os.name is 'nt':
+        if os.name == 'nt':
             workers = 0
         else:
             workers = multiprocessing.cpu_count()
