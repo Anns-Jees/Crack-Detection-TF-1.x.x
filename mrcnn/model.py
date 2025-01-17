@@ -23,14 +23,18 @@ from tensorflow.keras import layers as KL
 from tensorflow.keras import models as KM
 from tensorflow.keras.callbacks import Callback
 import numpy as np
+import tensorflow.keras as keras
 
 
 from mrcnn import utils
 from mrcnn.utils import Dataset
 
-# Requires TensorFlow 1.3+ and Keras 2.0.8+.
-assert LooseVersion(tf.__version__) >= LooseVersion("1.3")
+import tensorflow.keras as keras
+from distutils.version import LooseVersion
+
+# Version check
 assert LooseVersion(keras.__version__) >= LooseVersion('2.0.8')
+
 
 
 ############################################################
