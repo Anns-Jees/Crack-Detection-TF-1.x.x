@@ -1879,9 +1879,8 @@ class MaskRCNN():
             input_gt_boxes = KL.Input(
                 shape=[None, 4], name="input_gt_boxes", dtype=tf.float32)
             # Normalize coordinates
-            anchors = KL.Lambda(lambda x: tf.Variable(anchors), 
-                    output_shape=(65472, 4),  # Use the shape you just printed
-                    name="anchors")(input_image)
+            anchors = KL.Lambda(lambda x: tf.constant(self.anchors), name="anchors")(input_image)
+
 
 
             # 3. GT Masks (zero padded)
