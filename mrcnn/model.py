@@ -2605,31 +2605,32 @@ class MaskRCNN():
         return results
 
     def get_anchors(self, image_shape):
-    """Returns anchor pyramid for the given image size."""
-    backbone_shapes = compute_backbone_shapes(self.config, image_shape)
-    # Cache anchors and reuse if image shape is the same
-    if not hasattr(self, "_anchor_cache"):
-        self._anchor_cache = {}
-    if not tuple(image_shape) in self._anchor_cache:
-        # Generate Anchors
-        a = utils.generate_pyramid_anchors(
-            self.config.RPN_ANCHOR_SCALES,
-            self.config.RPN_ANCHOR_RATIOS,
-            backbone_shapes,
-            self.config.BACKBONE_STRIDES,
-            self.config.RPN_ANCHOR_STRIDE
-        )
-        
-        # Debugging: Print the shape of anchors
-        print("Shape of anchors:", a.shape)
 
-        # Keep a copy of the latest anchors in pixel coordinates because
-        # it's used in inspect_model notebooks.
-        self.anchors = a
+        """Returns anchor pyramid for the given image size."""
+        backbone_shapes = compute_backbone_shapes(self.config, image_shape)
+        # Cache anchors and reuse if image shape is the same
+        if not hasattr(self, "_anchor_cache"):
+            self._anchor_cache = {}
+        if not tuple(image_shape) in self._anchor_cache:
+            # Generate Anchors
+            a = utils.generate_pyramid_anchors(
+                self.config.RPN_ANCHOR_SCALES,
+                self.config.RPN_ANCHOR_RATIOS,
+                backbone_shapes,
+                self.config.BACKBONE_STRIDES,
+                self.config.RPN_ANCHOR_STRIDE
+            )
+            
+            # Debugging: Print the shape of anchors
+            print("Shape of anchors:", a.shape)
 
-        # Normalize coordinates
-        self._anchor_cache[tuple(image_shape)] = utils.norm_boxes(a, image_shape[:2])
-    return self._anchor_cache[tuple(image_shape)]
+            # Keep a copy of the latest anchors in pixel coordinates because
+            # it's used in inspect_model notebooks.
+            self.anchors = a
+
+            # Normalize coordinates
+            self._anchor_cache[tuple(image_shape)] = utils.norm_boxes(a, image_shape[:2])
+        return self._anchor_cache[tuple(image_shape)]
 
 
     def ancestor(self, tensor, name, checked=None):
