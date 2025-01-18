@@ -2108,41 +2108,38 @@ class MaskRCNN():
         exclude: list of layer names to exclude
         """
         import h5py
-        # Conditional import to support versions of Keras before 2.2
-        try:
-            from tensorflow.keras.models import saving
-        except ImportError:
-            # For older versions of TensorFlow, use 'topology' namespace
-            from tensorflow.keras.models import topology as saving
-
         if exclude:
             by_name = True
 
         if h5py is None:
             raise ImportError('`load_weights` requires h5py.')
+        
+        # Load the weights file
         f = h5py.File(filepath, mode='r')
         if 'layer_names' not in f.attrs and 'model_weights' in f:
             f = f['model_weights']
-
+        
         # In multi-GPU training, we wrap the model. Get layers
         # of the inner model because they have the weights.
         keras_model = self.keras_model
-        layers = keras_model.inner_model.layers if hasattr(keras_model, "inner_model")\
-            else keras_model.layers
+        layers = keras_model.inner_model.layers if hasattr(keras_model, "inner_model") else keras_model.layers
 
         # Exclude some layers
         if exclude:
             layers = filter(lambda l: l.name not in exclude, layers)
 
+        # Load weights directly using the TensorFlow Keras method
         if by_name:
-            saving.load_weights_from_hdf5_group_by_name(f, layers)
+            keras_model.load_weights(filepath, by_name=True)
         else:
-            saving.load_weights_from_hdf5_group(f, layers)
+            keras_model.load_weights(filepath)
+        
         if hasattr(f, 'close'):
             f.close()
 
         # Update the log directory
         self.set_log_dir(filepath)
+
 
     def get_imagenet_weights(self):
         """Downloads ImageNet trained weights from Keras.
