@@ -2605,28 +2605,27 @@ class MaskRCNN():
             })
         return results
 
-  
-
     def get_anchors(self, image_shape):
-        # Your anchor generation logic
-        # Assuming anchors have the shape (num_anchors, 4)
-        anchors = self.get_anchors(image_shape)  # NumPy array or list of anchors
-        
-        # Convert anchors to TensorFlow tensor, if needed
-        anchors_tensor = tf.convert_to_tensor(anchors, dtype=tf.float32)
-        
-        # Now, we define the output shape of the Lambda layer
-        anchor_shape = tf.shape(anchors_tensor)  # Using tf.shape to get the dynamic shape
-        
-        # Use the Lambda layer with the specified output_shape
-        anchors_layer = KL.Lambda(
-            lambda x: anchors_tensor,  # Using tf.constant or converted tensor
-            name="anchors", 
-            output_shape=lambda input_shape: anchor_shape  # Dynamic shape calculation for Lambda
-        )(input_image)
-        
-        return anchors_layer
-
+        """Returns anchor pyramid for the given image size."""
+        backbone_shapes = compute_backbone_shapes(self.config, image_shape)
+        # Cache anchors and reuse if image shape is the same
+        if not hasattr(self, "_anchor_cache"):
+            self._anchor_cache = {}
+        if not tuple(image_shape) in self._anchor_cache:
+            # Generate Anchors
+            a = utils.generate_pyramid_anchors(
+                self.config.RPN_ANCHOR_SCALES,
+                self.config.RPN_ANCHOR_RATIOS,
+                backbone_shapes,
+                self.config.BACKBONE_STRIDES,
+                self.config.RPN_ANCHOR_STRIDE)
+            # Keep a copy of the latest anchors in pixel coordinates because
+            # it's used in inspect_model notebooks.
+            # TODO: Remove this after the notebook are refactored to not use it
+            self.anchors = a
+            # Normalize coordinates
+            self._anchor_cache[tuple(image_shape)] = utils.norm_boxes(a, image_shape[:2])
+        return self._anchor_cache[tuple(image_shape)]
 
     def ancestor(self, tensor, name, checked=None):
         """Finds the ancestor of a TF tensor in the computation graph.
