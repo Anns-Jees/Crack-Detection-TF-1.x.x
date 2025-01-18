@@ -69,7 +69,7 @@ class CrackConfig(Config):
     IMAGES_PER_GPU = 2
 
     # Number of classes (including background)
-    NUM_CLASSES = 1 + 1  # Background + crack
+    NUM_CLASSES = 28  # Background + crack
 
     # Number of training steps per epoch
     STEPS_PER_EPOCH = 100
@@ -97,7 +97,36 @@ class CrackDataset(utils.Dataset):
         subset: Subset to load: train or val
         """
         # Add classes. We have only one class to add.
-        self.add_class("crack", 1, "crack")
+        self.add_class("crack", 0, "Road-Defects")
+        self.add_class("crack", 1, "Bleending-Surface")
+        self.add_class("crack", 2, "Corrugation")
+        self.add_class("crack", 3, "Cracks")
+        self.add_class("crack", 4, "Deformation")
+        self.add_class("crack", 5, "Disintegration")
+        self.add_class("crack", 6, "Fatty-Surface")
+        self.add_class("crack", 7, "Hairline-Carcking")
+        self.add_class("crack", 8, "Hungry-Surface")
+        self.add_class("crack", 9, "Loss of aggregates")
+        self.add_class("crack", 10, "Ravelling")
+        self.add_class("crack", 11, "Road-Defects")
+        self.add_class("crack", 12, "Rutting")
+        self.add_class("crack", 13, "Shallow-depression")
+        self.add_class("crack", 14, "Upheaval")
+        self.add_class("crack", 15, "alligator")
+        self.add_class("crack", 16, "corrugations")
+        self.add_class("crack", 17, "edge breaking")
+        self.add_class("crack", 18, "edge cracking")
+        self.add_class("crack", 19, "longitudinal cracking")
+        self.add_class("crack", 20, "missing - Potholes")
+        self.add_class("crack", 21, "potholes")
+        self.add_class("crack", 22, "reflection")
+        self.add_class("crack", 23, "reflection cracking")
+        self.add_class("crack", 24, "settlements")
+        self.add_class("crack", 25, "slippage")
+        self.add_class("crack", 26, "steaking")
+        self.add_class("crack", 27, "stripping")
+        self.add_class("crack", 28, "traverse crack")
+
 
         # Train or validation dataset?
         assert subset in ["train", "val"]
@@ -403,4 +432,3 @@ if __name__ == '__main__':
     else:
         print("'{}' is not recognized. "
               "Use 'train' or 'splash'".format(args.command))
-
