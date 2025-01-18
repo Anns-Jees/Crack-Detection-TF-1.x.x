@@ -2109,36 +2109,45 @@ class MaskRCNN():
         """
         import h5py
         if exclude:
-            by_name = True
+            by_name = True  # Ensure by_name is set to True if any layers are excluded
 
         if h5py is None:
             raise ImportError('`load_weights` requires h5py.')
-        
+
         # Load the weights file
-        f = h5py.File(filepath, mode='r')
-        if 'layer_names' not in f.attrs and 'model_weights' in f:
-            f = f['model_weights']
-        
-        # In multi-GPU training, we wrap the model. Get layers
-        # of the inner model because they have the weights.
-        keras_model = self.keras_model
-        layers = keras_model.inner_model.layers if hasattr(keras_model, "inner_model") else keras_model.layers
+        with h5py.File(filepath, mode='r') as f:
+            if 'layer_names' not in f.attrs and 'model_weights' in f:
+                f = f['model_weights']
 
-        # Exclude some layers
-        if exclude:
-            layers = filter(lambda l: l.name not in exclude, layers)
+            # In multi-GPU training, get layers of the inner model because they have the weights
+            keras_model = self.keras_model
+            layers = keras_model.inner_model.layers if hasattr(keras_model, "inner_model") else keras_model.layers
 
-        # Load weights directly using the TensorFlow Keras method
-        if by_name:
-            keras_model.load_weights(filepath, by_name=True)
-        else:
-            keras_model.load_weights(filepath)
-        
-        if hasattr(f, 'close'):
-            f.close()
+            # Exclude some layers
+            if exclude:
+                layers = filter(lambda l: l.name not in exclude, layers)
 
-        # Update the log directory
+            # Attempt to load weights by name or directly (depending on the by_name flag)
+            if by_name:
+                try:
+                    keras_model.load_weights(filepath, by_name=True)
+                except ValueError as e:
+                    # Handle the shape mismatch issue during loading
+                    print(f"Error loading weights by name: {e}")
+                    print("Attempting to load weights with by_name=False")
+                    keras_model.load_weights(filepath, by_name=False)
+            else:
+                try:
+                    keras_model.load_weights(filepath)
+                except ValueError as e:
+                    # Handle the shape mismatch issue during loading
+                    print(f"Error loading weights directly: {e}")
+                    print("Attempting to load weights with by_name=True")
+                    keras_model.load_weights(filepath, by_name=True)
+
+        # Update the log directory (if needed)
         self.set_log_dir(filepath)
+
 
 
     def get_imagenet_weights(self):
