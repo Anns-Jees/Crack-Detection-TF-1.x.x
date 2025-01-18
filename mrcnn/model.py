@@ -2116,38 +2116,30 @@ class MaskRCNN():
             raise ImportError('`load_weights` requires h5py.')
         
         # Load the model weights
-        f = h5py.File(filepath, mode='r')
+        with h5py.File(filepath, mode='r') as f:
+            # Check for compatibility of the file format
+            if 'layer_names' not in f.attrs and 'model_weights' in f:
+                f = f['model_weights']
 
-        # Check for compatibility of the file format
-        if 'layer_names' not in f.attrs and 'model_weights' in f:
-            f = f['model_weights']
+            # In multi-GPU training, we wrap the model. Get layers of the inner model.
+            keras_model = self.keras_model
+            layers = keras_model.inner_model.layers if hasattr(keras_model, "inner_model") else keras_model.layers
 
-        # In multi-GPU training, we wrap the model. Get layers of the inner model.
-        keras_model = self.keras_model
-        layers = keras_model.inner_model.layers if hasattr(keras_model, "inner_model") else keras_model.layers
+            # Exclude some layers
+            if exclude:
+                layers = filter(lambda l: l.name not in exclude, layers)
 
-        # Exclude some layers
-        if exclude:
-            layers = filter(lambda l: l.name not in exclude, layers)
-
-        # TensorFlow 2.x compatible way to load weights
-        if by_name:
-            # Load weights by layer name
-            for layer in layers:
-                if layer.name in f:
-                    layer.set_weights(f[layer.name][()])
-        else:
-            # Load all weights
-            for layer in layers:
-                if layer.name in f:
-                    layer.set_weights(f[layer.name][()])
-
-        # Close the file
-        if hasattr(f, 'close'):
-            f.close()
-
-        # Update the log directory if needed
-        self.set_log_dir(filepath)
+            # TensorFlow 2.x compatible way to load weights
+            if by_name:
+                # Load weights by layer name
+                for layer in layers:
+                    if layer.name in f:
+                        layer.set_weights(f[layer.name][:])  # Accessing weights as numpy arrays
+            else:
+                # Load all weights
+                for layer in layers:
+                    if layer.name in f:
+                        layer.set_weights(f[layer.name][:])  # Accessing weights as numpy arrays
 
 
     def get_imagenet_weights(self):
