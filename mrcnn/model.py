@@ -2610,7 +2610,7 @@ class MaskRCNN():
     def get_anchors(self, image_shape):
         # Your anchor generation logic
         # Assuming anchors have the shape (num_anchors, 4)
-        anchors = self.generate_anchors(image_shape)  # NumPy array or list of anchors
+        anchors = self.get_anchors(image_shape)  # NumPy array or list of anchors
         
         # Convert anchors to TensorFlow tensor, if needed
         anchors_tensor = tf.convert_to_tensor(anchors, dtype=tf.float32)
