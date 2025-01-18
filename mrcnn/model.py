@@ -2134,12 +2134,20 @@ class MaskRCNN():
                 # Load weights by layer name
                 for layer in layers:
                     if layer.name in f:
-                        layer.set_weights(f[layer.name][:])  # Accessing weights as numpy arrays
+                        # Ensure it's a dataset before accessing it
+                        if isinstance(f[layer.name], h5py.Dataset):
+                            layer.set_weights(f[layer.name][:])  # Accessing weights as numpy arrays
+                        else:
+                            print(f"Skipping layer {layer.name}, no dataset found")
             else:
                 # Load all weights
                 for layer in layers:
                     if layer.name in f:
-                        layer.set_weights(f[layer.name][:])  # Accessing weights as numpy arrays
+                        # Ensure it's a dataset before accessing it
+                        if isinstance(f[layer.name], h5py.Dataset):
+                            layer.set_weights(f[layer.name][:])  # Accessing weights as numpy arrays
+                        else:
+                            print(f"Skipping layer {layer.name}, no dataset found")
 
 
     def get_imagenet_weights(self):
