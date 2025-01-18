@@ -25,7 +25,7 @@ from tensorflow.keras import models as KM
 from tensorflow.keras.callbacks import Callback
 import numpy as np
 import tensorflow.keras as keras
-
+import h5py
 
 from mrcnn import utils
 from mrcnn.utils import Dataset
@@ -2101,7 +2101,7 @@ class MaskRCNN():
         checkpoint = os.path.join(dir_name, checkpoints[-1])
         return checkpoint
 
-    import h5py
+    
 
     def load_weights(self, filepath, by_name=False, exclude=None):
         """Modified version of the corresponding Keras function with
