@@ -2111,9 +2111,12 @@ class MaskRCNN():
         # Conditional import to support versions of Keras before 2.2
         # TODO: remove in about 6 months (end of 2018)
         try:
-            from tensorflow.keras.engine import saving
+            from tensorflow.keras.saving import saving_api as saving
+
         except ImportError:
-            from tensorflow.keras.engine import topology as saving
+            from tensorflow.keras import layers as saving
+
+         
 
         if exclude:
             by_name = True
