@@ -2618,14 +2618,20 @@ class MaskRCNN():
                 self.config.RPN_ANCHOR_RATIOS,
                 backbone_shapes,
                 self.config.BACKBONE_STRIDES,
-                self.config.RPN_ANCHOR_STRIDE)
+                self.config.RPN_ANCHOR_STRIDE
+            )
+            
+            # Debugging: Print the shape of anchors
+            print("Shape of anchors:", a.shape)
+
             # Keep a copy of the latest anchors in pixel coordinates because
             # it's used in inspect_model notebooks.
-            # TODO: Remove this after the notebook are refactored to not use it
             self.anchors = a
+
             # Normalize coordinates
             self._anchor_cache[tuple(image_shape)] = utils.norm_boxes(a, image_shape[:2])
         return self._anchor_cache[tuple(image_shape)]
+
 
     def ancestor(self, tensor, name, checked=None):
         """Finds the ancestor of a TF tensor in the computation graph.
