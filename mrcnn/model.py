@@ -1879,7 +1879,11 @@ class MaskRCNN():
             input_gt_boxes = KL.Input(
                 shape=[None, 4], name="input_gt_boxes", dtype=tf.float32)
             # Normalize coordinates
-            anchors = KL.Lambda(lambda x: tf.constant(self.anchors), name="anchors")(input_image)
+            # Assuming `self.anchors` holds the anchors from the `get_anchors` method
+
+            anchors = KL.Lambda(lambda x: tf.constant(self.anchors), 
+                                output_shape=(None, 65472, 4),  # Batch size is None, followed by the shape of the anchors
+                                name="anchors")(input_image)
 
 
 
