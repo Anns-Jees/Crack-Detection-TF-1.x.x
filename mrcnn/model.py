@@ -2109,11 +2109,11 @@ class MaskRCNN():
         """
         import h5py
         # Conditional import to support versions of Keras before 2.2
-        # TODO: remove in about 6 months (end of 2018)
         try:
-            from tensorflow.keras.engine import saving
+            from tensorflow.keras.models import saving
         except ImportError:
-            from tensorflow.keras.engine import topology as saving
+            # For older versions of TensorFlow, use 'topology' namespace
+            from tensorflow.keras.models import topology as saving
 
         if exclude:
             by_name = True
